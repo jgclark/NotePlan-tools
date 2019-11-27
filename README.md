@@ -18,7 +18,7 @@ Set the following Constants at the top of the file:
 - StorageType: select whether you're using iCloud for storage (the default) or Drobpox
 - NumHeaderLines: number of lines at the start of a note file to regard as the header. The default is 1. Relevant when moving lines around.
 - Username: your username
-- TagsToRemove: list of tags to remove. Default '#waiting,#high'
+- TagsToRemove: list of tags to remove. Default ["#waiting","#high"]
 
 ## Automatic running
 This can be configured to run automatically using macOS launchctl.
