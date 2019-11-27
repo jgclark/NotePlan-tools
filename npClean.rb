@@ -1,7 +1,7 @@
 #!/usr/bin/ruby
 #----------------------------------------------------------------------------------
 # NotePlan note cleanser
-# (c) JGC, v0.5, 26.11.2019
+# (c) JGC, v0.6, 27.11.2019
 #----------------------------------------------------------------------------------
 # Script to clean up items in NP note or calendar files.
 #
@@ -13,7 +13,7 @@
 #
 # When cleaning, it
 # - removes the time component of any @done() mentions that NP automatically adds
-# - removes #waiting or #high tags from @done tasks
+# - removes a set of user-specified tags from @done tasks
 # - [TURNED OFF] moves @done items to the ## Done section at the end of files, along with 
 #   any sub-tasks or info lines following. (If main task is complete or cancelled, we assume
 #   this should affect all subtasks too.)
@@ -26,6 +26,7 @@
 # - NumHeaderLines: number of lines at the start of a note file to regard as the header
 #   Default is 1. Relevant when moving lines around.
 # - Username: your username
+# - TagsToRemove: array of tag names to remove in completed tasks
 #----------------------------------------------------------------------------------
 # TODO
 # * [x] why time stripping not working?
@@ -45,6 +46,7 @@ require 'etc'	# for login lookup
 Username = 'jonathan' # change me
 NumHeaderLines = 2 # suits my use, but probably wants to be 1 for most people
 StorageType = "iCloud"	# or Dropbox
+TagsToRemove = ["#waiting","#high"] # simple array of strings
 DateFormat = "%d.%m.%y"
 DateTimeFormat = "%e %b %Y %H:%M"
 
@@ -170,26 +172,22 @@ class NPNote
 	
 	
 	def clean_tags_dates
-		# remove unneeded tags or >dates
+		# remove unneeded tags or >dates from complete or cancelled tasks
 		# puts "  clean_tags_dates ..."
 		n = cleaned = 0
 		while (n < @lineCount)
-			# remove any >YYYY-MM-DD on completed tasks
-			if ( ( @lines[n] =~ /\s>\d{4}\-\d{2}\-\d{2}/ ) && ( @lines[n] =~ /\[x\]/ ) )
+			# remove any >YYYY-MM-DD on completed or cancelled tasks
+			if ( ( @lines[n] =~ /\s>\d{4}\-\d{2}\-\d{2}/ ) && ( @lines[n] =~ /\[(x|-)\]/ ) )
 				@lines[n].gsub!(/\s>\d{4}\-\d{2}\-\d{2}/, "")
 				cleaned += 1
 			end
 			
-			# remove any #waiting tags on complete tasks
-			if ( ( @lines[n] =~ /#waiting/ ) && ( @lines[n] =~ /\[x\]/ ) )
-				@lines[n].gsub!(/ #waiting/, "")
-				cleaned += 1
-			end
-			
-			# remove any #high tags on complete tasks
-			if ( ( @lines[n] =~ /#high/ ) && ( @lines[n] =~ /\[x\]/ ) )
-				@lines[n].gsub!(/ #high/, "")
-				cleaned += 1
+			# Remove any tags from the TagsToRemove list. Iterate over that array:
+			TagsToRemove.each do | tag |
+				if ( ( @lines[n] =~ /#{tag}/ ) && ( @lines[n] =~ /\[(x|-)\]/ ) )
+					@lines[n].gsub!(/ #{tag}/, "")
+					cleaned += 1
+				end
 			end
 			n += 1
 		end
