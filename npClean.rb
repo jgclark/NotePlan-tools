@@ -29,12 +29,6 @@
 # - TagsToRemove: array of tag names to remove in completed tasks
 #----------------------------------------------------------------------------------
 # TODO
-# * [x] why time stripping not working?
-# * [x] why calendar file getting notes saved there?
-# * [x] update so only re-writes files when needed (otherwise files keep getting updated ...)
-# * [x] take todos from calendar files with an included [[note title]] and move to that note
-# * [x] enable to run automatically via launchctl
-# * [x] cope with multiple [[note title]] links in a line
 # * [ ] cope with moving subheads as well
 #----------------------------------------------------------------------------------
 
@@ -54,7 +48,7 @@ DateTimeFormat = "%e %b %Y %H:%M"
 TodaysDate = Date.today	# can't work out why this needs to be a 'constant' to work -- something about visibility, I suppose
 User = Etc.getlogin		# for debugging when running by launchctl
 if ( StorageType == "iCloud" )
-	NPBaseDir		= "/Users/#{Username}/Library/Mobile Documents/iCloud~co~noteplan~NotePlan/Documents" # for iCloud storage
+	NPBaseDir = "/Users/#{Username}/Library/Mobile Documents/iCloud~co~noteplan~NotePlan/Documents" # for iCloud storage
 else
 	NPBaseDir = "/Users/#{Username}/Dropbox/Apps/NotePlan/Documents" # for Dropbox storage
 end
@@ -196,7 +190,8 @@ class NPNote
 			puts "  - removed #{cleaned} tags/dates"
 		end
 	end
-	
+
+
 	def insert_new_task( newLine )
 		# Insert 'line' into position after header (defined by NumHeaderLines)
 		# puts "  insert_new_task ..."
@@ -208,6 +203,7 @@ class NPNote
 		@lines[NumHeaderLines] = newLine
 		@lineCount += 1
 	end
+
 
 	def move_calendar_to_notes
 		# Move tasks with a [[note link]] to that note (inserting after header)
@@ -258,7 +254,8 @@ class NPNote
 			puts "  - moved #{moved} lines to notes"
 		end
 	end
-	
+
+
 	def reorder_lines
 		# Shuffle @done and cancelled lines to relevant sections at end of the file
 		# TODO: doesn't yet deal with notes with subheads in them
@@ -414,7 +411,6 @@ class NPNote
 			end
 		}
 	end
-
 end
 
 
