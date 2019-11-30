@@ -1,7 +1,7 @@
 #!/usr/bin/ruby
 #----------------------------------------------------------------------------------
 # NotePlan note cleanser
-# (c) JGC, v0.6, 27.11.2019
+# (c) JGC, v0.6,1, 30.11.2019
 #----------------------------------------------------------------------------------
 # Script to clean up items in NP note or calendar files.
 #
@@ -486,9 +486,9 @@ else
 	end
 end
 
-puts "Found #{n} notes to attempt to clean"
 
 if ( n > 0 )	# if we have some notes to work on ...
+	puts "Found #{n} notes to attempt to clean"
 	# For each NP file to clean, do the cleaning:
 	i=0
 	$notes.each do | note | 
