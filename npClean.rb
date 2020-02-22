@@ -1,13 +1,13 @@
 #!/usr/bin/ruby
 #----------------------------------------------------------------------------------
 # NotePlan note cleanser
-# (c) JGC, v0.6,1, 30.11.2019
+# (c) JGC, v0.6.6, 22.2.2020
 #----------------------------------------------------------------------------------
 # Script to clean up items in NP note or calendar files.
 #
 # Two ways of running this:
 # 1. with passed filename pattern, when it does this just for that file (if it exists)
-#    NB: it's a pattern so can pass 'a*.txt' for example
+#    NB: it's a pattern glob so can pass 'a*.txt' for example
 # 2. with no arguments, it checks all files updated in the last 24 hours
 #    NB: this is what it will do if run automatically by launchctl.
 #
@@ -17,7 +17,7 @@
 # - [TURNED OFF] moves @done items to the ## Done section at the end of files, along with 
 #   any sub-tasks or info lines following. (If main task is complete or cancelled, we assume
 #   this should affect all subtasks too.)
-# - remove any lines with just * or -
+# - removes any lines with just * or -
 # - moves any calendar entries with [[Note link]] in it to that note, after
 #   the header section
 # 
@@ -30,15 +30,31 @@
 #----------------------------------------------------------------------------------
 # TODO
 # * [ ] cope with moving subheads as well
+# * [ ] update {-2d} etc. dates according to previous due date
+# * [x] add colouration of output (https://github.com/fazibear/colorize)
+# * [x] use bell character on line 260
+# * [x] change to move closed and open tasks with [[Note]] mentions
 #----------------------------------------------------------------------------------
+# Spec for subheads etc.
+# Read all into a more detailed data structure and then write out?
+#	- Title line
+#	- 1 or 2 metadata lines, starting with #tag or Aim:
+#	- open section
+#		- (opt) Heading line
+#			- (opt) Sub-heading
+#				- (opt) Task
+#				- indented lines of comment or bullet or just text
+#	- done section ('#[#] Done') -- to include cancelled, unlike NP built-in behaviour
+#		- as above
 
 require 'date'
 require 'time'
 require 'etc'	# for login lookup
+require 'colorize'
 
 # Setting variables to tweak
 Username = 'jonathan' # change me
-NumHeaderLines = 2 # suits my use, but probably wants to be 1 for most people
+NumHeaderLines = 3 # suits my use, but probably wants to be 1 for most people
 StorageType = "iCloud"	# or Dropbox
 TagsToRemove = ["#waiting","#high"] # simple array of strings
 DateFormat = "%d.%m.%y"
@@ -57,6 +73,15 @@ NPCalendarDir = "#{NPBaseDir}/Calendar"
 
 timeNow = Time.now
 timeNowFmttd = timeNow.strftime(DateTimeFormat)
+
+# Colours, using the colorization gem
+# to show some possible combinations, run	String.color_samples
+# to show list of possible modes, run 	puts String.modes  (e.g. underline, bold, blink)
+String.disable_colorization false
+CompletedColour = :light_green
+ActiveColour = :light_yellow
+WarningColour = :light_red
+InstructionColour = :light_cyan
 
 # Main arrays that sadly need to be global
 $allNotes = Array.new	# to hold all note objects
@@ -213,11 +238,11 @@ class NPNote
 		n = moved = 0
 		while (n < @lineCount)
 			line = @lines[n]
-			# find open todo lines with [[note title]] mentions
-			if ( line =~ /^\s*\*[^\]]+\[\[.*\]\]/ )
+			# find todo lines with [[note title]] mentions
+			if ( line =~ /^\s*\*.*\[\[.*\]\]/ )
 				# the following regex matches returns an array with one item, so make a string (by join)
 				# NB the '+?' gets minimum number of chars, to avoid grabbing contents of several [[notes]] in the same line
-				line.scan( /^\s*\*[^\]]+\[\[(.+?)\]\]/ )	{ |m| noteName = m.join() }
+				line.scan( /^\s*\*.*\[\[(.+?)\]\]/ )	{ |m| noteName = m.join() }
 				puts "  - found note link [[#{noteName}]]"
 				
 				# find appropriate note file to add to
@@ -243,13 +268,12 @@ class NPNote
 					$allNotes[noteToAddTo].rewrite_file()
 					moved += 1
 				else	# if note not found
-					puts "Warning: can't find matching note for [[#{noteName}]]. Ignoring"
-					exit
+					puts "** Warning: can't find matching note for [[#{noteName}]]. Ignoring".colorize(WarningColour)
 				end
 			end
 			n += 1
 		end
-		if (moved>0)
+		if (moved > 0)
 			@isUpdated = 1
 			puts "  - moved #{moved} lines to notes"
 		end
@@ -420,22 +444,22 @@ end
 mtime = 0
 
 # Read in all notes files
-puts "Starting npClean at #{timeNowFmttd}"
+# puts "Starting npClean at #{timeNowFmttd}"
 i = 0
 Dir::chdir(NPNotesDir)
 Dir.glob("*.txt").each do | this_file |
 	$allNotes[i] = NPNote.new(this_file,i)
 	i += 1
 end
-puts "Read in all #{i} notes files"
+# puts "Read in all #{i} notes files"
 
 n = 0 # number of notes/calendar entries to work on
 
 if ( ARGV[0] )
 	# We have a file pattern given, so find that (starting in the notes directory), and use it
 	# @@@ could use error handling here
-	puts "Procesing files matching #{ARGV[0]}"
 	Dir::chdir(NPNotesDir)
+	# puts "Looking for note files matching #{ARGV[0]}"
 	Dir.glob(ARGV[0]).each do | this_file |
 		# Note has already been read in; so now just find which one to point to
 		$allNotes.each do | an |
@@ -445,18 +469,19 @@ if ( ARGV[0] )
 			end
 		end
 	end
-	if (i == 0)
+	if (n == 0)
 		# continue by looking in the calendar directory
 		Dir::chdir(NPCalendarDir)
+		# puts "Looking for calendar files matching #{ARGV[0]}"
 		Dir.glob(ARGV[0]).each do | this_file |
 			$notes[n] = NPNote.new(this_file,n)
 			n += 1
 		end
 	end
 else
-	# Read metadata for all note files in the NotePlan directory, and 
-	# find those altered in the last 24hrs
-	puts "Starting npClean at #{timeNowFmttd} for files altered in last 24 hours"
+	# Read metadata for all note files in the NotePlan directory,
+	# and find those altered in the last 24hrs
+	puts "Starting npClean at #{timeNowFmttd} for all note & calendar files altered in last 24 hours."
 	Dir::chdir(NPNotesDir)
 	Dir.glob("*.txt").each do | this_file |
 		# if modified time (mtime) in the last
@@ -488,12 +513,11 @@ end
 
 
 if ( n > 0 )	# if we have some notes to work on ...
-	puts "Found #{n} notes to attempt to clean"
+	# puts "Found #{n} notes to attempt to clean:"
 	# For each NP file to clean, do the cleaning:
 	i=0
 	$notes.each do | note | 
-		puts
-		puts "  Cleaning file id #{note.id}:'#{note.title}' ..."
+		puts "  Cleaning file id #{note.id}: " + "#{note.title}".bold + " ..."
 		note.remove_empty_tasks
 		note.clean_tags_dates
 		note.clean_dates
@@ -504,5 +528,5 @@ if ( n > 0 )	# if we have some notes to work on ...
 		i += 1
 	end
 else
-	puts "No matching files found.\n"
+	puts "  Warning: No matching files found.\n".colorization(WarningColour)
 end
