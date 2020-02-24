@@ -1,7 +1,7 @@
 #!/usr/bin/ruby
 #----------------------------------------------------------------------------------
 # NotePlan note cleanser
-# (c) JGC, v0.6.6, 22.2.2020
+# (c) JGC, v0.6.7, 24.2.2020
 #----------------------------------------------------------------------------------
 # Script to clean up items in NP note or calendar files.
 #
@@ -29,10 +29,10 @@
 # - TagsToRemove: array of tag names to remove in completed tasks
 #----------------------------------------------------------------------------------
 # TODO
+# * [ ] fix empty line being left when moving a calendar to note
 # * [ ] cope with moving subheads as well
 # * [ ] update {-2d} etc. dates according to previous due date
 # * [x] add colouration of output (https://github.com/fazibear/colorize)
-# * [x] use bell character on line 260
 # * [x] change to move closed and open tasks with [[Note]] mentions
 #----------------------------------------------------------------------------------
 # Spec for subheads etc.
@@ -173,7 +173,7 @@ class NPNote
 	
 	def remove_empty_tasks
 		# Clean up lines with just * or - in them
-		# puts "  remove_empty_tasks ..."
+		puts "  remove_empty_tasks ..."
 		n = cleaned = 0
 		while (n < @lineCount)
 			# blank any lines which just have a * or -
@@ -190,9 +190,9 @@ class NPNote
 	end
 	
 	
-	def clean_tags_dates
+	def remove_tags_dates
 		# remove unneeded tags or >dates from complete or cancelled tasks
-		# puts "  clean_tags_dates ..."
+		puts "  remove_tags_dates ..."
 		n = cleaned = 0
 		while (n < @lineCount)
 			# remove any >YYYY-MM-DD on completed or cancelled tasks
@@ -219,7 +219,7 @@ class NPNote
 
 	def insert_new_task( newLine )
 		# Insert 'line' into position after header (defined by NumHeaderLines)
-		# puts "  insert_new_task ..."
+		puts "  insert_new_task ..."
 		n = @lineCount  # start iterating from the end of the array
 		while (n >= NumHeaderLines)
 			@lines[n+1] = @lines[n]
@@ -232,7 +232,7 @@ class NPNote
 
 	def move_calendar_to_notes
 		# Move tasks with a [[note link]] to that note (inserting after header)
-		# puts "  move_calendar_to_notes ..."
+		puts "  move_calendar_to_notes ..."
 		noteName = noteToAddTo = nil
 		cal = nil
 		n = moved = 0
@@ -254,7 +254,8 @@ class NPNote
 
 				if ( noteToAddTo )	# if note is found
 					# remove this line from the calendar note + write file out
-					@lines[n] = nil
+					# @lines[n]. = nil # @@@ leaves an empty line
+					@lines.delete(n) # @@@ doesn't seem to do anything ???
 					
 					# Also remove [[name]] by finding string points
 					labelL = line.index('[[')-1
@@ -268,7 +269,7 @@ class NPNote
 					$allNotes[noteToAddTo].rewrite_file()
 					moved += 1
 				else	# if note not found
-					puts "** Warning: can't find matching note for [[#{noteName}]]. Ignoring".colorize(WarningColour)
+					puts "   Warning: can't find matching note for [[#{noteName}]]. Ignoring".colorize(WarningColour)
 				end
 			end
 			n += 1
@@ -283,7 +284,7 @@ class NPNote
 	def reorder_lines
 		# Shuffle @done and cancelled lines to relevant sections at end of the file
 		# TODO: doesn't yet deal with notes with subheads in them
-		# puts "  reorder_lines ..."
+		puts "  reorder_lines ..."
 		line = ''
 		doneToMove = Array.new			# NB: zero-based
 		doneToMoveLength = Array.new	# NB: zero-based
@@ -421,7 +422,7 @@ class NPNote
 	
 	def rewrite_file
 		# write out this update file
-		# puts "  > writing updated version of '#{@filename}'..."
+		puts "  > writing updated version of '#{@filename}'..."
 		filepath = nil
 		# open file and write all the lines out
 		if ( @isCalendar == 1 )
@@ -519,7 +520,7 @@ if ( n > 0 )	# if we have some notes to work on ...
 	$notes.each do | note | 
 		puts "  Cleaning file id #{note.id}: " + "#{note.title}".bold + " ..."
 		note.remove_empty_tasks
-		note.clean_tags_dates
+		note.remove_tags_dates
 		note.clean_dates
 		note.move_calendar_to_notes	if ( note.isCalendar == 1 )
 		# note.reorder_lines
@@ -528,5 +529,5 @@ if ( n > 0 )	# if we have some notes to work on ...
 		i += 1
 	end
 else
-	puts "  Warning: No matching files found.\n".colorization(WarningColour)
+	puts "  Warning: No matching files found.\n".colorize(WarningColour)
 end
