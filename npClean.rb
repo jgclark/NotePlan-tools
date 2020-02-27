@@ -1,7 +1,7 @@
 #!/usr/bin/ruby
 #----------------------------------------------------------------------------------
 # NotePlan note cleanser
-# (c) JGC, v0.6.7, 24.2.2020
+# (c) JGC, v0.6.8, 26.2.2020
 #----------------------------------------------------------------------------------
 # Script to clean up items in NP note or calendar files.
 #
@@ -30,8 +30,8 @@
 #----------------------------------------------------------------------------------
 # TODO
 # * [ ] fix empty line being left when moving a calendar to note
-# * [ ] cope with moving subheads as well
 # * [ ] update {-2d} etc. dates according to previous due date
+# * [ ] cope with moving subheads as well
 # * [x] add colouration of output (https://github.com/fazibear/colorize)
 # * [x] change to move closed and open tasks with [[Note]] mentions
 #----------------------------------------------------------------------------------
@@ -254,17 +254,17 @@ class NPNote
 
 				if ( noteToAddTo )	# if note is found
 					# remove this line from the calendar note + write file out
-					# @lines[n]. = nil # @@@ leaves an empty line
-					@lines.delete(n) # @@@ doesn't seem to do anything ???
+					@lines[n] = nil # @@@ leaves an empty line
+					# @lines.delete(n) # @@@ but doesn't seem to do anything ???
 					
-					# Also remove [[name]] by finding string points
+					# Also remove the [[name]] text by finding string points
 					labelL = line.index('[[')-1
 					labelR = line.index(']]')+2
 					line = "#{line[0..labelL]}#{line[labelR..-2]}" # also chomp off last character (newline)
 					## add the calendar date to the line
 					#line = "#{line} >#{@title[0..3]}-#{@title[4..5]}-#{@title[6..7]}" # requires YYYY-MM-DD format
 					# insert it after header lines in the note file
-					$allNotes[noteToAddTo].insert_new_task(line)	# @@@
+					$allNotes[noteToAddTo].insert_new_task(line)
 					# write the note file out
 					$allNotes[noteToAddTo].rewrite_file()
 					moved += 1
@@ -419,6 +419,79 @@ class NPNote
 		end
 	end
 
+
+	def calc_offset_date(oldDate, interval)
+		# Calculate next review date, assuming interval is of form nn[dwmq]
+		daysToAdd = 0
+		unit = interval[-1]
+		num = interval.chop.to_i
+		case unit
+		when 'd'
+			daysToAdd = num
+		when 'w'
+			daysToAdd = num*7
+		when 'm'
+			daysToAdd = num*30
+		when 'q'
+			daysToAdd = num*90
+		else
+			puts "Error in calc_offset_date from #{oldDate} by #{interval}".colorize(WarningColour)
+		end
+		puts "  COD: with #{oldDate} interval #{interval} found #{daysToAdd} daysToAdd"
+		newDate = oldDate + daysToAdd
+		return newDate
+	end
+
+	
+	def use_template_dates
+		# Take template dates and turn into real dates
+		dateString = ""
+		currentTargetDate = ""
+		calcDate = ""
+		n = 0
+		# Go through each line in the file
+		@lines.each do | line |
+			dateString = ""
+			# find date in H2+ header lines (of form d.m.y and variations of that form)
+			if ( line =~ /^##/ )
+				currentTargetDate = "" # clear any previous date when we get to a new heading
+				line.scan( /(\d{1,2}[\-\.\/]\d{1,2}[\-\.\/]\d{2,4})/ )	{ |m| dateString = m.join() }
+				if ( dateString != "")
+					currentTargetDate = dateString
+					puts "  UTD: Found CTD #{currentTargetDate} in '#{line}'"
+				end
+				# break	# go on to next line
+			end
+			
+			# find todo lines with {+3d} or {-4w} etc.
+			dateOffsetString = ""
+			if (( line =~ /\*\s+(\[ \])?/ ) and ( line =~ /\{[\+\-]\d+[dwm]\}/ ))
+				puts "  UTD: Found line '#{line}'"
+				line.scan( /\{([\+\-]\d+[dwm])\}/ )	{ |m| dateOffsetString = m.join() }	
+				if ( dateOffsetString != "" )
+					puts "  UTD: Found DOS 	#{dateOffsetString} in '#{line}'"
+					if ( currentTargetDate != "" )
+						calcDate = calc_offset_date( Date.parse(currentTargetDate) , dateOffsetString )
+						# Remove the offset {-3d} text by finding string points
+						labelL = line.index('{')-1
+						labelR = line.index('}')+2
+						line = "#{line[0..labelL]}#{line[labelR..-2]}" # also chomp off last character (newline)
+						# then add the new date
+						line += " >#{calcDate}"
+						@lines[n] = line
+						# Now write out calcDate 
+						@isUpdated = 1
+					else
+						puts "Error:  in use_template_dates: no currentTargetDate for line '#{line}'".colorize(WarningColour)
+					end
+				end
+			end
+			n += 1
+		end
+
+		# then work out the target date in it
+		# 
+	end
 	
 	def rewrite_file
 		# write out this update file
@@ -523,6 +596,7 @@ if ( n > 0 )	# if we have some notes to work on ...
 		note.remove_tags_dates
 		note.clean_dates
 		note.move_calendar_to_notes	if ( note.isCalendar == 1 )
+		note.use_template_dates	if ( note.isCalendar == 0 )
 		# note.reorder_lines
 		# If there have been changes, write out the file
 		note.rewrite_file	if ( note.isUpdated == 1 )
