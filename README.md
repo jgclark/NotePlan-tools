@@ -1,18 +1,24 @@
 # NotePlan Cleaner
 Ruby script to clean up recently-changed NotePlan app files.
-Runs with both iCloud or Dropbox storage.
-
-## Running the Cleaner
-There are 2 ways of running this:
-1. with passed filename pattern, where it works on any matching Calendar or Note files. For example, '202003*.txt' for example
-2. with no arguments, it checks all files updated in the last 24 hours. 
 
 When cleaning, it
 - removes the time part of any @done() mentions that NotePlan automatically adds
 - removes #waiting or #high tags from @done tasks (configurable)
 - remove any lines with just * or -
 - moves any calendar entries with [[Note link]] in it to that note, after the header section
-- changes any mentions of date offset patterns (e.g. {-10d}, {+2w}, {-3m}) to being scheduled dates (e.g. >2020-02-27), if it can find a DD-MM-YYYY date pattern in the previous markdown heading
+- changes any mentions of date offset patterns (e.g. {-10d}, {+2w}, {-3m}) to being scheduled dates (e.g. >2020-02-27), if it can find a DD-MM-YYYY date pattern in the previous markdown heading. (It also ignores offsets in a section with a heading that includes a #template hashtag.)
+
+## Running the Cleaner
+There are 2 ways of running this:
+1. with passed filename pattern(s), where it works on any matching Calendar or Note files. For example, '202003*.txt' 
+2. with no arguments, it checks all files updated in the last 24 hours. 
+
+It works with both iCloud or Dropbox storage.
+
+You can also specific command-line options: 
+- -h for help, 
+- -v for verbose output 
+- -w for more verbose output
 
 ## Configuration
 Set the following constants at the top of the file:

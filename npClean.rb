@@ -1,15 +1,9 @@
 #!/usr/bin/ruby
 #----------------------------------------------------------------------------------
 # NotePlan note cleanser
-# (c) JGC, v0.6.9, 26.2.2020
+# (c) JGC, v1.0.0, 28.2.2020
 #----------------------------------------------------------------------------------
 # Script to clean up items in NP note or calendar files.
-#
-# Two ways of running this:
-# 1. with passed filename pattern, when it does this just for that file (if it exists)
-#    NB: it's a pattern glob so can pass 'a*.txt' for example
-# 2. with no arguments, it checks all files updated in the last 24 hours
-#    NB: this is what it will do if run automatically by launchctl.
 #
 # When cleaning, it
 # - removes the time component of any @done() mentions that NP automatically adds
@@ -18,9 +12,18 @@
 #   any sub-tasks or info lines following. (If main task is complete or cancelled, we assume
 #   this should affect all subtasks too.)
 # - removes any lines with just * or -
-# - moves any calendar entries with [[Note link]] in it to that note, after
-#   the header section
+# - moves any calendar entries with [[Note link]] in it to that note, after the header section
+# - take template dates and turn into real dates. i.e. change {-12d} or {+3w} to a >date
+#    based upon a date (dd.mm.yyyy) in the prededing markdown header line.
+#    It ignores those found after a markdown header include the tag #template.
 # 
+# Two ways of running this:
+# 1. with passed filename pattern, when it does this just for that file (if it exists)
+#    NB: it's a pattern glob so can pass 'a*.txt' for example
+# 2. with no arguments, it checks all files updated in the last 24 hours
+#    NB: this is what it will do if run automatically by launchctl.
+# Can also specific options: -h for help, -v for verbose and -vv for more verbose mode.
+#
 # Configuration:
 # - StorageType: select iCloud (default) or Drobpox
 # - NumHeaderLines: number of lines at the start of a note file to regard as the header
@@ -29,8 +32,8 @@
 # - TagsToRemove: array of tag names to remove in completed tasks
 #----------------------------------------------------------------------------------
 # TODO
-# * [ ] fix empty line being left when moving a calendar to note
 # * [ ] cope with moving subheads as well
+# * [x] fix empty line being left when moving a calendar to note
 # * [x] update {-2d} etc. dates according to previous due date
 # * [x] add colouration of output (https://github.com/fazibear/colorize)
 # * [x] change to move closed and open tasks with [[Note]] mentions
@@ -51,6 +54,7 @@ require 'date'
 require 'time'
 require 'etc'	# for login lookup
 require 'colorize'
+require 'optparse'	# more details at https://docs.ruby-lang.org/en/2.1.0/OptionParser.html
 
 # Setting variables to tweak
 Username = 'jonathan' # change me
@@ -71,6 +75,7 @@ end
 NPNotesDir	= "#{NPBaseDir}/Notes"
 NPCalendarDir = "#{NPBaseDir}/Calendar"
 
+# Other variables
 timeNow = Time.now
 timeNowFmttd = timeNow.strftime(DateTimeFormat)
 
@@ -83,7 +88,8 @@ ActiveColour = :light_yellow
 WarningColour = :light_red
 InstructionColour = :light_cyan
 
-# Main arrays that sadly need to be global
+# Variables that need to be globally available
+$verbose = 0
 $allNotes = Array.new	# to hold all note objects
 $notes    = Array.new	# to hold all relevant note objects
 
@@ -107,9 +113,10 @@ class NPNote
 		@title = nil
 		@lines = Array.new
 		@lineCount = 0
-		@cancelledHeader = @doneHeader = 0
-		@isCalendar = 0
-		@isUpdated = 0
+		@cancelledHeader = 0
+		@doneHeader = 0
+		@isCalendar = false
+		@isUpdated = false
 
 		# initialise other variables (that don't need to persist with the class)
 		n = 0
@@ -134,19 +141,19 @@ class NPNote
 		if (@filename =~ /\d{8}\.txt/)
 			# for Calendar file, use the date from filename
 			@title = @filename[0..7]
-			@isCalendar = 1
+			@isCalendar = true
 		else
 			# otherwise use first line (but take off heading characters at the start and starting and ending whitespace)
 			tempTitle = @lines[0].gsub(/^#+\s*/, "")
 			@title = tempTitle.gsub(/\s+$/,"")
-			@isCalendar = 0
+			@isCalendar = false
 		end
 	end
 	
 
 	def clean_dates
 		# remove HH:MM part of @done(...) date-time stamps
-		# puts "  clean_dates ..."
+		puts "  clean_dates ..."		if ( $verbose > 1 )
 		n = cleaned = 0
 		line = outline = ''
 		while (n < @lineCount)
@@ -165,15 +172,15 @@ class NPNote
 			n += 1
 		end
 		if (cleaned>0)
-			@isUpdated = 1
-			puts "  - cleaned #{cleaned} dates"
+			@isUpdated = true
+			puts "  - cleaned #{cleaned} dates"		if ( $verbose > 1 )
 		end
 	end
 	
 	
 	def remove_empty_tasks
 		# Clean up lines with just * or - in them
-		puts "  remove_empty_tasks ..."
+		puts "  remove_empty_tasks ..."		if ( $verbose > 1 )
 		n = cleaned = 0
 		while (n < @lineCount)
 			# blank any lines which just have a * or -
@@ -184,15 +191,15 @@ class NPNote
 			n += 1
 		end
 		if (cleaned>0)
-			@isUpdated = 1
-			puts "  - removed #{cleaned} emtpy lines"
+			@isUpdated = true
+			puts "  - removed #{cleaned} emtpy lines"			if ( $verbose > 0 )
 		end
 	end
 	
 	
 	def remove_tags_dates
 		# remove unneeded tags or >dates from complete or cancelled tasks
-		puts "  remove_tags_dates ..."
+		puts "  remove_tags_dates ..."		if ( $verbose > 1 )
 		n = cleaned = 0
 		while (n < @lineCount)
 			# remove any >YYYY-MM-DD on completed or cancelled tasks
@@ -211,15 +218,15 @@ class NPNote
 			n += 1
 		end
 		if (cleaned>0)
-			@isUpdated = 1
-			puts "  - removed #{cleaned} tags/dates"
+			@isUpdated = true
+			puts "  - removed #{cleaned} tags/dates"		if ( $verbose > 0 )
 		end
 	end
 
 
 	def insert_new_task( newLine )
 		# Insert 'line' into position after header (defined by NumHeaderLines)
-		puts "  insert_new_task ..."
+		puts "  insert_new_task ..."		if ( $verbose > 1 )
 		n = @lineCount  # start iterating from the end of the array
 		while (n >= NumHeaderLines)
 			@lines[n+1] = @lines[n]
@@ -232,7 +239,7 @@ class NPNote
 
 	def move_calendar_to_notes
 		# Move tasks with a [[note link]] to that note (inserting after header)
-		puts "  move_calendar_to_notes ..."
+		puts "  move_calendar_to_notes ..."		if ( $verbose > 1 )
 		noteName = noteToAddTo = nil
 		cal = nil
 		n = moved = 0
@@ -243,7 +250,7 @@ class NPNote
 				# the following regex matches returns an array with one item, so make a string (by join)
 				# NB the '+?' gets minimum number of chars, to avoid grabbing contents of several [[notes]] in the same line
 				line.scan( /^\s*\*.*\[\[(.+?)\]\]/ )	{ |m| noteName = m.join() }
-				puts "  - found note link [[#{noteName}]]"
+				puts "  - found note link [[#{noteName}]]"		if ( $verbose > 0 )
 				
 				# find appropriate note file to add to
 				$allNotes.each do | nn | 
@@ -254,15 +261,12 @@ class NPNote
 
 				if ( noteToAddTo )	# if note is found
 					# remove this line from the calendar note + write file out
-					@lines[n] = nil # @@@ leaves an empty line
-					# @lines.delete(n) # @@@ but doesn't seem to do anything ???
+					@lines.delete_at(n)
 					
 					# Also remove the [[name]] text by finding string points
 					labelL = line.index('[[')-1
 					labelR = line.index(']]')+2
 					line = "#{line[0..labelL]}#{line[labelR..-2]}" # also chomp off last character (newline)
-					## add the calendar date to the line
-					#line = "#{line} >#{@title[0..3]}-#{@title[4..5]}-#{@title[6..7]}" # requires YYYY-MM-DD format
 					# insert it after header lines in the note file
 					$allNotes[noteToAddTo].insert_new_task(line)
 					# write the note file out
@@ -275,8 +279,8 @@ class NPNote
 			n += 1
 		end
 		if (moved > 0)
-			@isUpdated = 1
-			puts "  - moved #{moved} lines to notes"
+			@isUpdated = true
+			puts "  - moved #{moved} lines to notes"		if ( $verbose > 0 )
 		end
 	end
 
@@ -284,7 +288,7 @@ class NPNote
 	def reorder_lines
 		# Shuffle @done and cancelled lines to relevant sections at end of the file
 		# TODO: doesn't yet deal with notes with subheads in them
-		puts "  reorder_lines ..."
+		puts "  reorder_lines ..."	if ( $verbose > 1 )
 		line = ''
 		doneToMove = Array.new			# NB: zero-based
 		doneToMoveLength = Array.new	# NB: zero-based
@@ -313,7 +317,7 @@ class NPNote
 				doneToMoveLength.push(linesToMove)
 			end
 		end
-		puts "    doneToMove:  #{doneToMove} / #{doneToMoveLength}"
+		puts "    doneToMove:  #{doneToMove} / #{doneToMoveLength}"	if ( $verbose > 1 )
 
 		# Do some done line shuffling, is there's anything to do
 		if ( doneToMove.size > 0 )
@@ -330,7 +334,7 @@ class NPNote
 			c = 0
 			doneToMove.each do | n |
 				linesToMove = doneToMoveLength[c]
-				puts "      Copying lines #{n}-#{n+linesToMove} to insert at #{doneInsertionLine}"
+				puts "      Copying lines #{n}-#{n+linesToMove} to insert at #{doneInsertionLine}"	if ( $verbose > 1 )
 				(n..(n+linesToMove)).each do | i |
 					@lines.insert(doneInsertionLine, @lines[i])
 					@lineCount += 1
@@ -343,7 +347,7 @@ class NPNote
 			c = doneToMoveLength.size - 1
 			doneToMove.reverse.each do | n |
 				linesToMove = doneToMoveLength[c]
-				puts "      Deleting lines #{n}-#{n+linesToMove}"
+				puts "      Deleting lines #{n}-#{n+linesToMove}"	if ( $verbose > 1 )
 				(n+linesToMove).downto(n) do | i |
 					@lines.delete_at(i)
 					@lineCount -= 1
@@ -375,7 +379,7 @@ class NPNote
 				cancToMoveLength.push(linesToMove)
 			end
 		end
-		puts "    cancToMove: #{cancToMove} / #{cancToMoveLength}"
+		puts "    cancToMove: #{cancToMove} / #{cancToMoveLength}"	if ( $verbose > 1 )
 		
 		# Do some cancelled line shuffling, is there's anything to do
 		if ( cancToMove.size > 0 )
@@ -392,7 +396,7 @@ class NPNote
 			c = 0
 			cancToMove.each do | n |
 				linesToMove = cancToMoveLength[c]
-				puts "      Copying lines #{n}-#{n+linesToMove} to insert at #{cancelledInsertionLine}"
+				puts "      Copying lines #{n}-#{n+linesToMove} to insert at #{cancelledInsertionLine}"	if ( $verbose > 1 )
 				(n..(n+linesToMove)).each do |i|
 					@lines.insert(cancelledInsertionLine, @lines[i])
 					@lineCount += 1
@@ -405,9 +409,9 @@ class NPNote
 			c = doneToMoveLength.size - 1
 			cancToMove.reverse.each do | n |
 				linesToMove = doneToMoveLength[c]
-				puts "      Deleting lines #{n}-#{n+linesToMove}"
+				puts "      Deleting lines #{n}-#{n+linesToMove}"	if ( $verbose > 1 )
 				(n+linesToMove).downto(n) do | i |
-					puts "        Deleting line #{i} ..."
+					puts "        Deleting line #{i} ..."	if ( $verbose > 1 )
 					@lines.delete_at(i)
 					@lineCount -= 1
 					@doneHeader -= 1
@@ -415,7 +419,7 @@ class NPNote
 			end	
 			
 			# Finally mark note as updated
-			@isUpdated = 1
+			@isUpdated = true
 		end
 	end
 
@@ -445,32 +449,41 @@ class NPNote
 	
 	def use_template_dates
 		# Take template dates and turn into real dates
-		puts "  use_template_dates ..."
+		puts "  use_template_dates ..."		if ( $verbose > 1 )
 		dateString = ""
 		currentTargetDate = ""
 		calcDate = ""
+		lastWasTemplate = false
 		n = 0
 		# Go through each line in the file
 		@lines.each do | line |
 			dateString = ""
 			# find date in markdown header lines (of form d.m.yyyy and variations of that form)
 			if ( line =~ /^#+\s/ )
-				currentTargetDate = "" # clear any previous date when we get to a new heading
+				# clear previous settings when we get to a new heading
+				currentTargetDate = "" 
+				lastWasTemplate = false
 				line.scan( /(\d{1,2}[\-\.\/]\d{1,2}[\-\.\/]\d{4})/ )	{ |m| dateString = m.join() }
 				if ( dateString != "" )
+					# We have a date string to use for any offsets in the following section
 					currentTargetDate = dateString
-					# puts "    UTD: Found CTD #{currentTargetDate} in '#{line.chomp}'"
+					puts "    UTD: Found CTD #{currentTargetDate} in '#{line.chomp}'"	if ( $verbose > 1 )
+				end
+				if ( line =~ /#template/ )	
+					# We have a #template tag so ignore any offsets in the following section
+					lastWasTemplate = true
+					puts "    UTD: Found #template in '#{line.chomp}'"	if ( $verbose > 1 )
 				end
 			end
 			
 			# find todo lines with {+3d} or {-4w} etc.
 			dateOffsetString = ""
 			if (( line =~ /\*\s+(\[ \])?/ ) and ( line =~ /\{[\+\-]\d+[dwm]\}/ ))
-				# puts "    UTD: Found line '#{line.chomp}'"
+				puts "    UTD: Found line '#{line.chomp}'"		if ( $verbose > 1 )
 				line.scan( /\{([\+\-]\d+[dwm])\}/ )	{ |m| dateOffsetString = m.join() }	
 				if ( dateOffsetString != "" )
-					# puts "    UTD: Found DOS #{dateOffsetString} in '#{line.chomp}'"
-					if ( currentTargetDate != "" )
+					puts "    UTD: Found DOS #{dateOffsetString} in '#{line.chomp}'"	if ( $verbose > 1 )
+					if ( currentTargetDate != "" and not lastWasTemplate )
 						calcDate = calc_offset_date( Date.parse(currentTargetDate) , dateOffsetString )
 						# Remove the offset {-3d} text by finding string points
 						labelL = line.index('{')-1
@@ -479,12 +492,11 @@ class NPNote
 						# then add the new date
 						line += " >#{calcDate}"
 						@lines[n] = line
-						puts "    Used #{dateOffsetString} line to make '#{line.chomp}'"
+						puts "    Used #{dateOffsetString} line to make '#{line.chomp}'"		if ( $verbose > 1 )
 						# Now write out calcDate 
-						@isUpdated = 1
+						@isUpdated = true
 					else
-						# for debugging
-						# puts "    Error: in use_template_dates no currentTargetDate before line '#{line.chomp}'".colorize(WarningColour)
+						puts "    Warning: in use_template_dates no currentTargetDate before line '#{line.chomp}'".colorize(WarningColour)	if ( $verbose > 0 )
 					end
 				end
 			end
@@ -495,10 +507,10 @@ class NPNote
 
 	def rewrite_file
 		# write out this update file
-		puts "  > writing updated version of '#{@filename}'..."
+		puts "  > writing updated version of " + "#{@filename}".bold
 		filepath = nil
 		# open file and write all the lines out
-		if ( @isCalendar == 1 )
+		if ( @isCalendar )
 			filepath = "#{NPCalendarDir}/#{@filename}"
 		else
 			filepath = "#{NPNotesDir}/#{@filename}"
@@ -515,47 +527,69 @@ end
 #=======================================================================================
 # Main logic
 #=======================================================================================
-mtime = 0
 
+# Setup program options
+options = {}
+opt_parser = OptionParser.new do |opts|
+	opts.banner = "Usage: npClean.rb [options] file-pattern"
+	opts.separator ""
+	options[:verbose] = 0
+	opts.on("-v", "--verbose", "Show information as I work") do
+		options[:verbose] = 1
+	end
+	opts.on("-w", "--moreverbose", "Show more information as I work") do
+		options[:verbose] = 2
+	end
+	opts.on("-h", "--help", "Show help") do
+		puts opts
+		exit
+	end
+end
+opt_parser.parse!	# parse out options, leaving file patterns to process
+
+$verbose = options[:verbose]
 # Read in all notes files
-# puts "Starting npClean at #{timeNowFmttd}"
 i = 0
 Dir::chdir(NPNotesDir)
 Dir.glob("*.txt").each do | this_file |
 	$allNotes[i] = NPNote.new(this_file,i)
 	i += 1
 end
-# puts "Read in all #{i} notes files"
+puts "Read in all #{i} notes files"		if ( $verbose > 0 )
 
 n = 0 # number of notes/calendar entries to work on
 
-if ( ARGV[0] )
+if ( ARGV.count > 0 )
 	# We have a file pattern given, so find that (starting in the notes directory), and use it
 	# @@@ could use error handling here
 	Dir::chdir(NPNotesDir)
-	# puts "Looking for note files matching #{ARGV[0]}"
-	Dir.glob(ARGV[0]).each do | this_file |
-		# Note has already been read in; so now just find which one to point to
-		$allNotes.each do | an |
-			if ( an.filename == this_file ) 
-				$notes[n] = an
-				n += 1
+	puts "Starting npClean at #{timeNowFmttd} for files matching pattern(s) #{ARGV}."
+	ARGV.each do | pattern |
+		Dir.glob(pattern).each do | this_file |
+			# Note has already been read in; so now just find which one to point to
+			$allNotes.each do | an |
+				if ( an.filename == this_file ) 
+					$notes[n] = an
+					n += 1
+				end
 			end
 		end
 	end
 	if (n == 0)
 		# continue by looking in the calendar directory
 		Dir::chdir(NPCalendarDir)
-		# puts "Looking for calendar files matching #{ARGV[0]}"
-		Dir.glob(ARGV[0]).each do | this_file |
-			$notes[n] = NPNote.new(this_file,n)
+		ARGV.each do | pattern |
+			Dir.glob(pattern).each do | this_file |
+				$notes[n] = NPNote.new(this_file,n)
 			n += 1
+			end
 		end
 	end
 else
 	# Read metadata for all note files in the NotePlan directory,
 	# and find those altered in the last 24hrs
-	puts "Starting npClean at #{timeNowFmttd} for all note & calendar files altered in last 24 hours."
+	mtime = 0
+	puts "Starting npClean at #{timeNowFmttd} for all Note and Calendar files altered in last 24 hours."	
 	Dir::chdir(NPNotesDir)
 	Dir.glob("*.txt").each do | this_file |
 		# if modified time (mtime) in the last
@@ -591,15 +625,15 @@ if ( n > 0 )	# if we have some notes to work on ...
 	# For each NP file to clean, do the cleaning:
 	i=0
 	$notes.each do | note | 
-		puts "  Cleaning file id #{note.id}: " + "#{note.title}".bold + " ..."
+		puts "Cleaning file id #{note.id} " + "#{note.title}".bold	if ( $verbose > 0 )
 		note.remove_empty_tasks
 		note.remove_tags_dates
 		note.clean_dates
-		note.move_calendar_to_notes	if ( note.isCalendar == 1 )
-		note.use_template_dates	if ( note.isCalendar == 0 )
+		note.move_calendar_to_notes	if ( note.isCalendar )
+		note.use_template_dates	if ( not note.isCalendar )
 		# note.reorder_lines
 		# If there have been changes, write out the file
-		note.rewrite_file	if ( note.isUpdated == 1 )
+		note.rewrite_file	if ( note.isUpdated )
 		i += 1
 	end
 else
