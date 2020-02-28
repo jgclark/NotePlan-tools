@@ -4,17 +4,18 @@ Runs with both iCloud or Dropbox storage.
 
 ## Running the Cleaner
 There are 2 ways of running this:
-1. with passed filename pattern, when it does this just for that file (if it exists). NB: it's a pattern so can pass 'a*.txt' for example
+1. with passed filename pattern, where it works on any matching Calendar or Note files. For example, '202003*.txt' for example
 2. with no arguments, it checks all files updated in the last 24 hours. 
 
 When cleaning, it
-- removes the time component of any @done() mentions that NotePlan automatically adds
+- removes the time part of any @done() mentions that NotePlan automatically adds
 - removes #waiting or #high tags from @done tasks (configurable)
 - remove any lines with just * or -
 - moves any calendar entries with [[Note link]] in it to that note, after the header section
+- changes any mentions of date offset patterns (e.g. {-10d}, {+2w}, {-3m}) to being scheduled dates (e.g. >2020-02-27), if it can find a DD-MM-YYYY date pattern in the previous markdown heading
 
 ## Configuration
-Set the following Constants at the top of the file:
+Set the following constants at the top of the file:
 - StorageType: select whether you're using iCloud for storage (the default) or Drobpox
 - NumHeaderLines: number of lines at the start of a note file to regard as the header. The default is 1. Relevant when moving lines around.
 - Username: your username

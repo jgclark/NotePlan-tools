@@ -1,7 +1,7 @@
 #!/usr/bin/ruby
 #----------------------------------------------------------------------------------
 # NotePlan note cleanser
-# (c) JGC, v0.6.8, 26.2.2020
+# (c) JGC, v0.6.9, 26.2.2020
 #----------------------------------------------------------------------------------
 # Script to clean up items in NP note or calendar files.
 #
@@ -30,8 +30,8 @@
 #----------------------------------------------------------------------------------
 # TODO
 # * [ ] fix empty line being left when moving a calendar to note
-# * [ ] update {-2d} etc. dates according to previous due date
 # * [ ] cope with moving subheads as well
+# * [x] update {-2d} etc. dates according to previous due date
 # * [x] add colouration of output (https://github.com/fazibear/colorize)
 # * [x] change to move closed and open tasks with [[Note]] mentions
 #----------------------------------------------------------------------------------
@@ -435,9 +435,9 @@ class NPNote
 		when 'q'
 			daysToAdd = num*90
 		else
-			puts "Error in calc_offset_date from #{oldDate} by #{interval}".colorize(WarningColour)
+			puts "    Error in calc_offset_date from #{oldDate} by #{interval}".colorize(WarningColour)
 		end
-		puts "  COD: with #{oldDate} interval #{interval} found #{daysToAdd} daysToAdd"
+		# puts "  COD: with #{oldDate} interval #{interval} found #{daysToAdd} daysToAdd"
 		newDate = oldDate + daysToAdd
 		return newDate
 	end
@@ -445,6 +445,7 @@ class NPNote
 	
 	def use_template_dates
 		# Take template dates and turn into real dates
+		puts "  use_template_dates ..."
 		dateString = ""
 		currentTargetDate = ""
 		calcDate = ""
@@ -452,24 +453,23 @@ class NPNote
 		# Go through each line in the file
 		@lines.each do | line |
 			dateString = ""
-			# find date in H2+ header lines (of form d.m.y and variations of that form)
-			if ( line =~ /^##/ )
+			# find date in markdown header lines (of form d.m.yyyy and variations of that form)
+			if ( line =~ /^#+\s/ )
 				currentTargetDate = "" # clear any previous date when we get to a new heading
-				line.scan( /(\d{1,2}[\-\.\/]\d{1,2}[\-\.\/]\d{2,4})/ )	{ |m| dateString = m.join() }
-				if ( dateString != "")
+				line.scan( /(\d{1,2}[\-\.\/]\d{1,2}[\-\.\/]\d{4})/ )	{ |m| dateString = m.join() }
+				if ( dateString != "" )
 					currentTargetDate = dateString
-					puts "  UTD: Found CTD #{currentTargetDate} in '#{line}'"
+					# puts "    UTD: Found CTD #{currentTargetDate} in '#{line.chomp}'"
 				end
-				# break	# go on to next line
 			end
 			
 			# find todo lines with {+3d} or {-4w} etc.
 			dateOffsetString = ""
 			if (( line =~ /\*\s+(\[ \])?/ ) and ( line =~ /\{[\+\-]\d+[dwm]\}/ ))
-				puts "  UTD: Found line '#{line}'"
+				# puts "    UTD: Found line '#{line.chomp}'"
 				line.scan( /\{([\+\-]\d+[dwm])\}/ )	{ |m| dateOffsetString = m.join() }	
 				if ( dateOffsetString != "" )
-					puts "  UTD: Found DOS 	#{dateOffsetString} in '#{line}'"
+					# puts "    UTD: Found DOS #{dateOffsetString} in '#{line.chomp}'"
 					if ( currentTargetDate != "" )
 						calcDate = calc_offset_date( Date.parse(currentTargetDate) , dateOffsetString )
 						# Remove the offset {-3d} text by finding string points
@@ -479,20 +479,20 @@ class NPNote
 						# then add the new date
 						line += " >#{calcDate}"
 						@lines[n] = line
+						puts "    Used #{dateOffsetString} line to make '#{line.chomp}'"
 						# Now write out calcDate 
 						@isUpdated = 1
 					else
-						puts "Error:  in use_template_dates: no currentTargetDate for line '#{line}'".colorize(WarningColour)
+						# for debugging
+						# puts "    Error: in use_template_dates no currentTargetDate before line '#{line.chomp}'".colorize(WarningColour)
 					end
 				end
 			end
 			n += 1
 		end
-
-		# then work out the target date in it
-		# 
 	end
 	
+
 	def rewrite_file
 		# write out this update file
 		puts "  > writing updated version of '#{@filename}'..."
