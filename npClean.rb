@@ -1,37 +1,12 @@
 #!/usr/bin/ruby
 #----------------------------------------------------------------------------------
-# NotePlan note cleanser
-# (c) JGC, v1.0.0, 28.2.2020
+# NotePlan note and calendar file cleanser
+# (c) JGC, v1.0.1, 29.2.2020
 #----------------------------------------------------------------------------------
-# Script to clean up items in NP note or calendar files.
-#
-# When cleaning, it
-# - removes the time component of any @done() mentions that NP automatically adds
-# - removes a set of user-specified tags from @done tasks
-# - [TURNED OFF] moves @done items to the ## Done section at the end of files, along with 
-#   any sub-tasks or info lines following. (If main task is complete or cancelled, we assume
-#   this should affect all subtasks too.)
-# - removes any lines with just * or -
-# - moves any calendar entries with [[Note link]] in it to that note, after the header section
-# - take template dates and turn into real dates. i.e. change {-12d} or {+3w} to a >date
-#    based upon a date (dd.mm.yyyy) in the prededing markdown header line.
-#    It ignores those found after a markdown header include the tag #template.
-# 
-# Two ways of running this:
-# 1. with passed filename pattern, when it does this just for that file (if it exists)
-#    NB: it's a pattern glob so can pass 'a*.txt' for example
-# 2. with no arguments, it checks all files updated in the last 24 hours
-#    NB: this is what it will do if run automatically by launchctl.
-# Can also specific options: -h for help, -v for verbose and -vv for more verbose mode.
-#
-# Configuration:
-# - StorageType: select iCloud (default) or Drobpox
-# - NumHeaderLines: number of lines at the start of a note file to regard as the header
-#   Default is 1. Relevant when moving lines around.
-# - Username: your username
-# - TagsToRemove: array of tag names to remove in completed tasks
+# See README.md file for details, how to run and configuration.
 #----------------------------------------------------------------------------------
 # TODO
+# * [x] fix extra space left after removing [[fff]]
 # * [ ] cope with moving subheads as well
 # * [x] fix empty line being left when moving a calendar to note
 # * [x] update {-2d} etc. dates according to previous due date
@@ -264,7 +239,7 @@ class NPNote
 					@lines.delete_at(n)
 					
 					# Also remove the [[name]] text by finding string points
-					labelL = line.index('[[')-1
+					labelL = line.index('[[')-2		# remove space before it as well
 					labelR = line.index(']]')+2
 					line = "#{line[0..labelL]}#{line[labelR..-2]}" # also chomp off last character (newline)
 					# insert it after header lines in the note file
