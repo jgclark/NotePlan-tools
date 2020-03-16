@@ -50,3 +50,4 @@ build-iPhoneSimulator/
 .rvmrc
 .vscode/settings.json
 *.yml
+.vscode/settings.json

@@ -142,10 +142,10 @@ class NPNote
       end
       n += 1
     end
-    if cleaned.positive?
-      @isUpdated = true
-      puts "  - cleaned #{cleaned} dates" if $verbose > 1
-    end
+    return unless cleaned.positive?
+
+    @isUpdated = true
+    puts "  - cleaned #{cleaned} dates" if $verbose > 1
   end
 
   def remove_empty_tasks
@@ -160,10 +160,10 @@ class NPNote
       end
       n += 1
     end
-    if cleaned.positive?
-      @isUpdated = true
-      puts "  - removed #{cleaned} emtpy lines" if $verbose > 0
-    end
+    return unless cleaned.positive?
+
+    @isUpdated = true
+    puts "  - removed #{cleaned} emtpy lines" if $verbose > 0
   end
 
   def remove_tags_dates
@@ -186,10 +186,10 @@ class NPNote
       end
       n += 1
     end
-    if cleaned.positive?
-      @isUpdated = true
-      puts "  - removed #{cleaned} tags/dates" if $verbose > 0
-    end
+    return unless cleaned.positive?
+
+    @isUpdated = true
+    puts "  - removed #{cleaned} tags/dates" if $verbose > 0
   end
 
   def insert_new_task(new_line)
@@ -242,10 +242,10 @@ class NPNote
       end
       n += 1
     end
-    if moved.positive?
-      @isUpdated = true
-      puts "  - moved #{moved} lines to notes" if $verbose > 0
-    end
+    return unless moved.positive?
+
+    @isUpdated = true
+    puts "  - moved #{moved} lines to notes" if $verbose > 0
   end
 
   def reorder_lines
