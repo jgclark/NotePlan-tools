@@ -193,7 +193,7 @@ class NPNote
     end
   end
 
-  def insert_new_task(newLine)
+  def insert_new_task(new_line)
     # Insert 'line' into position after header (defined by NUM_HEADER_LINES)
     puts '  insert_new_task ...' if $verbose > 1
     n = @lineCount # start iterating from the end of the array
@@ -201,7 +201,7 @@ class NPNote
       @lines[n + 1] = @lines[n]
       n -= 1
     end
-    @lines[NUM_HEADER_LINES] = newLine
+    @lines[NUM_HEADER_LINES] = new_line
     @lineCount += 1
   end
 
@@ -325,7 +325,7 @@ class NPNote
     # Go through all lines between metadata and ## Done section
     # start, noting cancelled line numbers
     n = 0
-    searchLineLimit = @doneHeader > 0 ? @doneHeader : @lineCount
+    searchLineLimit = @doneHeader.positive? ? @doneHeader : @lineCount
     while n < searchLineLimit
       n += 1
       line = @lines[n]
@@ -522,7 +522,7 @@ rescue StandardError => e
 end
 n = 0 # number of notes and calendar entries to work on
 
-if ARGV.count > 0
+if ARGV.count.positive?
   # We have a file pattern given, so find that (starting in the notes directory), and use it
   puts "Starting npClean at #{time_now_fmttd} for files matching pattern(s) #{ARGV}."
   begin

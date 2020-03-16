@@ -1,3 +1,4 @@
 {
-    "solargraph.diagnostics": true
+    "solargraph.diagnostics": true,
+    "editor.fontFamily": "JetBrains Mono, M+ 1m, iosevka, Menlo, monospace"
 }
