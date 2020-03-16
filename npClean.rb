@@ -1,12 +1,13 @@
 #!/usr/bin/ruby
 #-------------------------------------------------------------------------------
 # NotePlan note and calendar file cleanser
-# (c) JGC, v1.0.1, 29.2.2020
+# (c) JGC, v1.1, 16.3.2020
 #-------------------------------------------------------------------------------
 # See README.md file for details, how to run and configuration.
 #-------------------------------------------------------------------------------
 # TODO
 # * [ ] cope with moving subheads as well
+# * [x] add ability to find and clean notes in folders (from NP v2.5)
 # * [x] add command-line parameters, particularly for verbose level
 # * [x] fix extra space left after removing [[fff]]
 # * [x] fix empty line being left when moving a calendar to note
@@ -505,26 +506,69 @@ opt_parser = OptionParser.new do |opts|
   end
 end
 opt_parser.parse! # parse out options, leaving file patterns to process
-
 $verbose = options[:verbose]
-# Read in all notes files
-i = 0
-Dir.chdir(NP_NOTES_DIR)
-Dir.glob('*.txt').each do |this_file|
-  $allNotes[i] = NPNote.new(this_file, i)
-  i += 1
-end
-puts "Read in all #{i} notes files" if $verbose > 0
 
+# Read in all notes files (including sub-directories)
+i = 0
+begin
+  Dir.chdir(NP_NOTES_DIR)
+  Dir.glob('**/*.txt').each do |this_file|
+    $allNotes[i] = NPNote.new(this_file, i)
+    i += 1
+  end
+  puts "Read in all #{i} notes files" if $verbose > 0
+rescue StandardError => e
+  puts "ERROR: #{e.exception.message} when reading in all notes files".colorize(WarningColour)
+end
 n = 0 # number of notes and calendar entries to work on
 
 if ARGV.count.positive?
   # We have a file pattern given, so find that (starting in the notes directory), and use it
-  # @@@ could use error handling here
-  Dir.chdir(NP_NOTES_DIR)
   puts "Starting npClean at #{time_now_fmttd} for files matching pattern(s) #{ARGV}."
-  ARGV.each do |pattern|
-    Dir.glob(pattern).each do |this_file|
+  begin
+    Dir.chdir(NP_NOTES_DIR)
+    ARGV.each do |pattern|
+      Dir.glob('**/' + pattern).each do |this_file|
+        # Note has already been read in; so now just find which one to point to
+        $allNotes.each do |an|
+          if an.filename == this_file
+            $notes[n] = an
+            n += 1
+          end
+        end
+      end
+    end
+  rescue StandardError => e
+    puts "ERROR: #{e.exception.message} when reading in notes matching pattern #{pattern}".colorize(WarningColour)
+  end
+
+  # if no matching notes, continue by looking in the calendar directory
+  if n.zero?
+    begin
+      Dir.chdir(NP_CALENDAR_DIR)
+      ARGV.each do |pattern|
+        Dir.glob(pattern).each do |this_file|
+          $notes[n] = NPNote.new(this_file, n)
+          n += 1
+        end
+      end
+    rescue StandardError => e
+      puts "ERROR: #{e.exception.message} when reading in calendar files".colorize(WarningColour)
+    end
+  end
+
+else
+  # Read metadata for all note files in the NotePlan directory,
+  # and find those altered in the last 24hrs
+  mtime = 0
+  puts "Starting npClean at #{time_now_fmttd} for all Note and Calendar files altered in last 24 hours."
+  begin
+    Dir.chdir(NP_NOTES_DIR)
+    Dir.glob('**/*.txt').each do |this_file|
+      # if modified time (mtime) in the last
+      mtime = File.mtime(this_file)
+      next unless mtime > (time_now - 86_400)
+
       # Note has already been read in; so now just find which one to point to
       $allNotes.each do |an|
         if an.filename == this_file
@@ -533,48 +577,25 @@ if ARGV.count.positive?
         end
       end
     end
-  end
-  if n.zero?
-    # continue by looking in the calendar directory
-    Dir.chdir(NP_CALENDAR_DIR)
-    ARGV.each do |pattern|
-      Dir.glob(pattern).each do |this_file|
-        $notes[n] = NPNote.new(this_file, n)
-        n += 1
-      end
-    end
-  end
-else
-  # Read metadata for all note files in the NotePlan directory,
-  # and find those altered in the last 24hrs
-  mtime = 0
-  puts "Starting npClean at #{time_now_fmttd} for all Note and Calendar files altered in last 24 hours."
-  Dir.chdir(NP_NOTES_DIR)
-  Dir.glob('*.txt').each do |this_file|
-    # if modified time (mtime) in the last
-    mtime = File.mtime(this_file)
-    next unless mtime > (time_now - 86_400)
-
-    # Note has already been read in; so now just find which one to point to
-    $allNotes.each do |an|
-      if an.filename == this_file
-        $notes[n] = an
-        n += 1
-      end
-    end
+  rescue StandardError => e
+    puts "ERROR: #{e.exception.message} when finding recently changed files".colorize(WarningColour)
   end
 
   # Also read metadata for all calendar files in the NotePlan directory,
   # and find those altered in the last 24hrs
-  Dir.chdir(NP_CALENDAR_DIR)
-  Dir.glob('*.txt').each do |this_file|
-    # if modified time (mtime) in the last
-    mtime = File.mtime(this_file)
-    next unless mtime > (time_now - 86_400)
+  begin
+    Dir.chdir(NP_CALENDAR_DIR)
+    Dir.glob('*.txt').each do |this_file|
+      # if modified time (mtime) in the last
+      mtime = File.mtime(this_file)
+      next unless mtime > (time_now - 86_400)
 
-    # read the calendar file in
-    $notes[n] = NPNote.new(this_file, n)
-    n += 1
+      # read the calendar file in
+      $notes[n] = NPNote.new(this_file, n)
+      n += 1
+    end
+  rescue StandardError => e
+    puts "ERROR: #{e.exception.message} when finding recently changed files".colorize(WarningColour)
   end
 end
 
