@@ -1,17 +1,19 @@
 #!/usr/bin/ruby
 #-------------------------------------------------------------------------------
 # NotePlan note and calendar file cleanser
-# (c) JGC, v1.2, 1.5.2020
+# (c) JGC, v1.2.2, 31.5.2020
 #-------------------------------------------------------------------------------
 # See README.md file for details, how to run and configuration.
 #-------------------------------------------------------------------------------
-# TODO
+# FIXME:
+# * [x] include date when moving from calendar to note (move_calendar_to_notes)
+# * [x] fix extra space left after removing [[note name]]
+# * [x] fix empty line being left when moving a calendar to note
+# TODO:
 # * [ ] cope with moving subheads to archive as well
 # * [x] add processing of repeating tasks (my method, not the NP one)
 # * [x] issue 1: add ability to find and clean notes in folders (from NP v2.5), excluding @Archive and @Trash folders
 # * [x] add command-line parameters, particularly for verbose level
-# * [x] fix extra space left after removing [[fff]]
-# * [x] fix empty line being left when moving a calendar to note
 # * [x] update {-2d} etc. dates according to previous due date
 # * [x] add colouration of output (https://github.com/fazibear/colorize)
 # * [x] change to move closed and open tasks with [[Note]] mentions
@@ -72,16 +74,16 @@ $allNotes = []  # to hold all note objects
 $notes    = []  # to hold all relevant note objects
 
 #-------------------------------------------------------------------------
-# Class definition
+# Class definition: NPNote (here covers Note *and* Calendar files)
 #-------------------------------------------------------------------------
 class NPNote
   # Define the attributes that need to be visible outside the class instances
   attr_reader :id
   attr_reader :title
-  attr_reader :cancelledHeader
-  attr_reader :doneHeader
-  attr_reader :isCalendar
-  attr_reader :isUpdated
+  attr_reader :cancelled_header
+  attr_reader :done_header
+  attr_reader :is_calendar
+  attr_reader :is_updated
   attr_reader :filename
 
   def initialize(this_file, id)
@@ -91,10 +93,10 @@ class NPNote
     @title = nil
     @lines = []
     @lineCount = 0
-    @cancelledHeader = 0
-    @doneHeader = 0
-    @isCalendar = false
-    @isUpdated = false
+    @cancelled_header = 0
+    @done_header = 0
+    @is_calendar = false
+    @is_updated = false
 
     # initialise other variables (that don't need to persist with the class)
     n = 0
@@ -105,8 +107,8 @@ class NPNote
     f = File.open(@filename, 'r', encoding: 'utf-8')
     f.each_line do |line|
       @lines[n] = line
-      @doneHeader = n  if line =~ /^## Done$/
-      @cancelledHeader = n if line =~ /^## Cancelled$/
+      @done_header = n  if line =~ /^## Done$/
+      @cancelled_header = n if line =~ /^## Cancelled$/
       n -= 1 if line =~ /^\s*[\*\-]\s*$/ # i.e. remove lines with just a * or -
       n += 1
     end
@@ -117,12 +119,12 @@ class NPNote
     if @filename =~ /\d{8}\.txt/
       # for Calendar file, use the date from filename
       @title = @filename[0..7]
-      @isCalendar = true
+      @is_calendar = true
     else
       # otherwise use first line (but take off heading characters at the start and starting and ending whitespace)
       tempTitle = @lines[0].gsub(/^#+\s*/, '')
       @title = tempTitle.gsub(/\s+$/, '')
-      @isCalendar = false
+      @is_calendar = false
     end
   end
 
@@ -147,7 +149,7 @@ class NPNote
     end
     return unless cleaned.positive?
 
-    @isUpdated = true
+    @is_updated = true
     puts "  - cleaned #{cleaned} dates" if $verbose > 1
   end
 
@@ -165,7 +167,7 @@ class NPNote
     end
     return unless cleaned.positive?
 
-    @isUpdated = true
+    @is_updated = true
     puts "  - removed #{cleaned} emtpy lines" if $verbose > 0
   end
 
@@ -191,7 +193,7 @@ class NPNote
     end
     return unless cleaned.positive?
 
-    @isUpdated = true
+    @is_updated = true
     puts "  - removed #{cleaned} tags/dates" if $verbose > 0
   end
 
@@ -221,33 +223,42 @@ class NPNote
         line.scan(/^\s*\*.*\[\[(.+?)\]\]/) { |m| noteName = m.join }
         puts "  - found note link [[#{noteName}]]" if $verbose > 0
 
-        # find appropriate note file to add to
+        # find the note file to add to
         $allNotes.each do |nn|
           noteToAddTo = nn.id if nn.title == noteName
         end
 
         if noteToAddTo # if note is found
-          # remove this line from the calendar note + write file out
+          # Remove this line from the calendar note + write file out
           @lines.delete_at(n)
 
-          # Also remove the [[name]] text by finding string points
-          labelL = line.index('[[') - 2 # remove space before it as well
-          labelR = line.index(']]') + 2
-          line = "#{line[0..labelL]}#{line[labelR..-2]}" # also chomp off last character (newline)
-          # insert it after header lines in the note file
+          # Remove the [[name]] text by finding string points
+          label_start = line.index('[[') - 2 # remove space before it as well
+          label_end = line.index(']]') + 2
+          line = "#{line[0..label_start]}#{line[label_end..-2]}" # also chomp off last character (newline)
+
+          # If no due date specified in rest of the todo, add date from the title of the calendar file it came from
+          if line !~ />\d{4}\-\d{2}\-\d{2}/
+            cal_date = "#{@title[0..3]}-#{@title[4..5]}-#{@title[6..7]}"
+            puts "      '#{cal_date}' to add from #{@title}"
+            line += " >#{cal_date}"
+          end
+
+          # insert updated line after header lines in the note file
           $allNotes[noteToAddTo].insert_new_task(line, NUM_HEADER_LINES)
           # write the note file out
           $allNotes[noteToAddTo].rewrite_file
           moved += 1
+          n -=1   # decrement line count as we have deleted a line
         else # if note not found
           puts "   Warning: can't find matching note for [[#{noteName}]]. Ignoring".colorize(WarningColour)
         end
+        n += 1 # get ready to look at next line
       end
-      n += 1
     end
     return unless moved.positive?
 
-    @isUpdated = true
+    @is_updated = true
     puts "  - moved #{moved} lines to notes" if $verbose > 0
   end
 
@@ -264,7 +275,7 @@ class NPNote
     # Go through all lines between metadata and ## Done section
     # start, noting completed tasks
     n = 1
-    searchLineLimit = @doneHeader.positive? ? @doneHeader : @lineCount
+    searchLineLimit = @done_header.positive? ? @done_header : @lineCount
     while n < searchLineLimit
       n += 1
       line = @lines[n]
@@ -288,15 +299,15 @@ class NPNote
     # Do some done line shuffling, is there's anything to do
     unless doneToMove.empty?
       # If we haven't already got a Done section, make one
-      if @doneHeader.zero?
+      if @done_header.zero?
         @lines.push('')
         @lines.push('## Done')
         @lineCount += 2
-        @doneHeader = @lineCount
+        @done_header = @lineCount
       end
 
       # Copy the relevant lines
-      doneInsertionLine = @cancelledHeader != 0 ? @cancelledHeader : @lineCount
+      doneInsertionLine = @cancelled_header != 0 ? @cancelled_header : @lineCount
       c = 0
       doneToMove.each do |nn|
         linesToMove = doneToMoveLength[c]
@@ -318,7 +329,7 @@ class NPNote
           @lines.delete_at(i)
           @lineCount -= 1
           doneInsertionLine -= 1
-          @doneHeader -= 1
+          @done_header -= 1
         end
         c -= 1
       end
@@ -327,7 +338,7 @@ class NPNote
     # Go through all lines between metadata and ## Done section
     # start, noting cancelled line numbers
     n = 0
-    searchLineLimit = @doneHeader.positive? ? @doneHeader : @lineCount
+    searchLineLimit = @done_header.positive? ? @done_header : @lineCount
     while n < searchLineLimit
       n += 1
       line = @lines[n]
@@ -382,12 +393,12 @@ class NPNote
         puts "        Deleting line #{i} ..." if $verbose > 1
         @lines.delete_at(i)
         @lineCount -= 1
-        @doneHeader -= 1
+        @done_header -= 1
       end
     end
 
     # Finally mark note as updated
-    @isUpdated = true
+    @is_updated = true
   end
 
   def calc_offset_date(old_date, interval)
@@ -411,7 +422,7 @@ class NPNote
       puts "    Error in calc_offset_date from #{old_date} by #{interval}".colorize(WarningColour)
     end
     puts "    c_o_d: with #{old_date} interval #{interval} found #{days_to_add} days_to_add" if $verbose > 1
-    newDate = old_date + days_to_add # @@@ barfing here
+    newDate = old_date + days_to_add # FIXME: barfing here?
     newDate
   end
 
@@ -454,15 +465,15 @@ class NPNote
           if (currentTargetDate != '') && !lastWasTemplate
             calcDate = calc_offset_date(Date.parse(currentTargetDate), dateOffsetString)
             # Remove the offset {-3d} text by finding string points
-            labelL = line.index('{') - 1
-            labelR = line.index('}') + 2
-            line = "#{line[0..labelL]}#{line[labelR..-2]}" # also chomp off last character (newline)
+            label_start = line.index('{') - 1
+            label_end = line.index('}') + 2
+            line = "#{line[0..label_start]}#{line[label_end..-2]}" # also chomp off last character (newline)
             # then add the new date
             line += " >#{calcDate}"
             @lines[n] = line
             puts "    Used #{dateOffsetString} line to make '#{line.chomp}'" if $verbose > 1
             # Now write out calcDate
-            @isUpdated = true
+            @is_updated = true
           else
             puts "    Warning: in use_template_dates no currentTargetDate before line '#{line.chomp}'".colorize(WarningColour) if $verbose > 0
           end
@@ -476,8 +487,8 @@ class NPNote
     # process any completed tasks with @repeat(..) tags
     # When interval is of the form +2w it will duplicate the task for 2 weeks
     # after the date is was completed.
-    # When interval is of the form 2w it will duplicate the task for 2 weeks 
-    # after the date the task was last due. If this can't be determined, 
+    # When interval is of the form 2w it will duplicate the task for 2 weeks
+    # after the date the task was last due. If this can't be determined,
     # then default to the first option.
     # Valid intervals are [0-9][dwmqy].
     puts '  process_repeats ...' if $verbose > 1
@@ -491,11 +502,11 @@ class NPNote
       # i.e. @done(YYYY-MM-DD HH:MM)
       if line =~ /@done\(\d{4}\-\d{2}\-\d{2} \d{2}:\d{2}\)/
         # get completed date
-        line.scan(/\((\d{4}\-\d{2}\-\d{2}) \d{2}:\d{2}\)/) { |m|  completed_date = m.join }
+        line.scan(/\((\d{4}\-\d{2}\-\d{2}) \d{2}:\d{2}\)/) { |m| completed_date = m.join }
         updated_line = line.gsub(/\(\d{4}\-\d{2}\-\d{2} \d{2}:\d{2}\)/, "(#{completed_date})")
         @lines[n] = updated_line
         cleaned += 1
-        @isUpdated = true
+        @is_updated = true
         if updated_line =~ /@repeat\(.*\)/
           # get repeat to apply
           date_interval_string = ''
@@ -511,9 +522,9 @@ class NPNote
             # look for the due date (<YYYY-MM-DD)
             due_date = ''
             if updated_line =~ /<\d{4}\-\d{2}\-\d{2}/
-              updated_line.scan(/<(\d{4}\-\d{2}\-\d{2})/) { |m|  due_date = m.join }
+              updated_line.scan(/<(\d{4}\-\d{2}\-\d{2})/) { |m| due_date = m.join }
               # need to remove the old due date (and preceding whitespace)
-              updated_line = updated_line.gsub(/\s*<\d{4}\-\d{2}\-\d{2}/, "")
+              updated_line = updated_line.gsub(/\s*<\d{4}\-\d{2}\-\d{2}/, '')
             else
               # but if there is no due date then treat that as today
               due_date = completed_date
@@ -525,9 +536,9 @@ class NPNote
           # Create new repeat line:
           updated_line_without_done = updated_line.chomp
           # Remove the @done text
-          updated_line_without_done = updated_line_without_done.gsub(/@done\(.*\)/, "")
+          updated_line_without_done = updated_line_without_done.gsub(/@done\(.*\)/, '')
           # Replace the * [x] text with * [>]
-          updated_line_without_done = updated_line_without_done.gsub(/\[x\]/, "[>]")
+          updated_line_without_done = updated_line_without_done.gsub(/\[x\]/, '[>]')
           outline = "#{updated_line_without_done} >#{new_repeat_date}"
           # puts "      --> #{outline}" if $verbose > 1
 
@@ -544,7 +555,7 @@ class NPNote
     # write out this update file
     puts '  > writing updated version of ' + @filename.to_s.bold
     # open file and write all the lines out
-    filepath = if @isCalendar
+    filepath = if @is_calendar
                  "#{NP_CALENDAR_DIR}/#{@filename}"
                else
                  "#{NP_NOTES_DIR}/#{@filename}"
@@ -644,9 +655,9 @@ else
     Dir.glob('**/*.txt').each do |this_file|
       next unless this_file =~ /^[^@]/ # as can't get file glob including [^@] to work
 
-      # if modified time (mtime) in the last
+      # if modified time (mtime) in the last 24 hours
       mtime = File.mtime(this_file)
-      next unless mtime > (time_now - 86_400)
+      next unless mtime > (time_now - 86400)
 
       # Note has already been read in; so now just find which one to point to
       $allNotes.each do |an|
@@ -667,7 +678,7 @@ else
     Dir.glob('*.txt').each do |this_file|
       # if modified time (mtime) in the last
       mtime = File.mtime(this_file)
-      next unless mtime > (time_now - 86_400)
+      next unless mtime > (time_now - 86400)
 
       # read the calendar file in
       $notes[n] = NPNote.new(this_file, n)
@@ -688,11 +699,11 @@ if n.positive? # if we have some notes to work on ...
     note.remove_tags_dates
     note.process_repeats
     # note.clean_dates # now replaced by process_repeats
-    note.move_calendar_to_notes if note.isCalendar
-    note.use_template_dates unless note.isCalendar
+    note.move_calendar_to_notes if note.is_calendar
+    note.use_template_dates unless note.is_calendar
     # note.reorder_lines
     # If there have been changes, write out the file
-    note.rewrite_file if note.isUpdated
+    note.rewrite_file if note.is_updated
     i += 1
   end
 else
