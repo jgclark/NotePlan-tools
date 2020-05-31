@@ -1,17 +1,19 @@
 #!/usr/bin/ruby
 #-------------------------------------------------------------------------------
 # NotePlan note and calendar file cleanser
-# (c) JGC, v1.2.2, 31.5.2020
+# (c) JGC, v1.2.3, 31.5.2020
 #-------------------------------------------------------------------------------
 # See README.md file for details, how to run and configuration.
 #-------------------------------------------------------------------------------
 # FIXME:
-# * [x] include date when moving from calendar to note (move_calendar_to_notes)
+# * [ ] (issue #3) template mechanism failing for {0d}
+# * [x] (issue #4) include date when moving from calendar to note (move_calendar_to_notes)
 # * [x] fix extra space left after removing [[note name]]
 # * [x] fix empty line being left when moving a calendar to note
 # TODO:
-# * [ ] cope with moving subheads to archive as well
-# * [x] add processing of repeating tasks (my method, not the NP one)
+# * [ ] cope with moving subheads to archive as well - or is the better
+#       archiving now introduced in v2.4.4 enough?
+# * [x] (issue #2) add processing of repeating tasks (my method, not the NP one)
 # * [x] issue 1: add ability to find and clean notes in folders (from NP v2.5), excluding @Archive and @Trash folders
 # * [x] add command-line parameters, particularly for verbose level
 # * [x] update {-2d} etc. dates according to previous due date
@@ -217,44 +219,47 @@ class NPNote
     while n < @lineCount
       line = @lines[n]
       # find todo lines with [[note title]] mentions
-      if line =~ /^\s*\*.*\[\[.*\]\]/
-        # the following regex matches returns an array with one item, so make a string (by join)
-        # NB the '+?' gets minimum number of chars, to avoid grabbing contents of several [[notes]] in the same line
-        line.scan(/^\s*\*.*\[\[(.+?)\]\]/) { |m| noteName = m.join }
-        puts "  - found note link [[#{noteName}]]" if $verbose > 0
-
-        # find the note file to add to
-        $allNotes.each do |nn|
-          noteToAddTo = nn.id if nn.title == noteName
-        end
-
-        if noteToAddTo # if note is found
-          # Remove this line from the calendar note + write file out
-          @lines.delete_at(n)
-
-          # Remove the [[name]] text by finding string points
-          label_start = line.index('[[') - 2 # remove space before it as well
-          label_end = line.index(']]') + 2
-          line = "#{line[0..label_start]}#{line[label_end..-2]}" # also chomp off last character (newline)
-
-          # If no due date specified in rest of the todo, add date from the title of the calendar file it came from
-          if line !~ />\d{4}\-\d{2}\-\d{2}/
-            cal_date = "#{@title[0..3]}-#{@title[4..5]}-#{@title[6..7]}"
-            puts "      '#{cal_date}' to add from #{@title}"
-            line += " >#{cal_date}"
-          end
-
-          # insert updated line after header lines in the note file
-          $allNotes[noteToAddTo].insert_new_task(line, NUM_HEADER_LINES)
-          # write the note file out
-          $allNotes[noteToAddTo].rewrite_file
-          moved += 1
-          n -=1   # decrement line count as we have deleted a line
-        else # if note not found
-          puts "   Warning: can't find matching note for [[#{noteName}]]. Ignoring".colorize(WarningColour)
-        end
+      if line !~ /^\s*\*.*\[\[.*\]\]/
         n += 1 # get ready to look at next line
+        next
       end
+
+      # the following regex matches returns an array with one item, so make a string (by join)
+      # NB the '+?' gets minimum number of chars, to avoid grabbing contents of several [[notes]] in the same line
+      line.scan(/^\s*\*.*\[\[(.+?)\]\]/) { |m| noteName = m.join }
+      puts "  - found note link [[#{noteName}]]" if $verbose > 0
+
+      # find the note file to add to
+      $allNotes.each do |nn|
+        noteToAddTo = nn.id if nn.title == noteName
+      end
+
+      if noteToAddTo # if note is found
+        # Remove this line from the calendar note + write file out
+        @lines.delete_at(n)
+
+        # Remove the [[name]] text by finding string points
+        label_start = line.index('[[') - 2 # remove space before it as well
+        label_end = line.index(']]') + 2
+        line = "#{line[0..label_start]}#{line[label_end..-2]}" # also chomp off last character (newline)
+
+        # If no due date specified in rest of the todo, add date from the title of the calendar file it came from
+        if line !~ />\d{4}\-\d{2}\-\d{2}/
+          cal_date = "#{@title[0..3]}-#{@title[4..5]}-#{@title[6..7]}"
+          puts "      '#{cal_date}' to add from #{@title}"
+          line += " >#{cal_date}"
+        end
+
+        # insert updated line after header lines in the note file
+        $allNotes[noteToAddTo].insert_new_task(line, NUM_HEADER_LINES)
+        # write the note file out
+        $allNotes[noteToAddTo].rewrite_file
+        moved += 1
+        # n -= 1 # decrement line count as we have deleted a line FIXME:?
+      else # if note not found
+        puts "   Warning: can't find matching note for [[#{noteName}]]. Ignoring".colorize(WarningColour)
+      end
+      # n += 1 # get ready to look at next line
     end
     return unless moved.positive?
 
@@ -657,7 +662,7 @@ else
 
       # if modified time (mtime) in the last 24 hours
       mtime = File.mtime(this_file)
-      next unless mtime > (time_now - 86400)
+      next unless mtime > (time_now - 86_400)
 
       # Note has already been read in; so now just find which one to point to
       $allNotes.each do |an|
@@ -678,7 +683,7 @@ else
     Dir.glob('*.txt').each do |this_file|
       # if modified time (mtime) in the last
       mtime = File.mtime(this_file)
-      next unless mtime > (time_now - 86400)
+      next unless mtime > (time_now - 86_400)
 
       # read the calendar file in
       $notes[n] = NPNote.new(this_file, n)
