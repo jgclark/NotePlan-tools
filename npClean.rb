@@ -1,12 +1,12 @@
 #!/usr/bin/ruby
 #-------------------------------------------------------------------------------
 # NotePlan note and calendar file cleanser
-# (c) JGC, v1.2.3, 31.5.2020
+# (c) JGC, v1.2.4, 31.5.2020
 #-------------------------------------------------------------------------------
 # See README.md file for details, how to run and configuration.
 #-------------------------------------------------------------------------------
 # FIXME:
-# * [ ] (issue #3) template mechanism failing for {0d}
+# * [x] (issue #3) template mechanism failing for {0d}
 # * [x] (issue #4) include date when moving from calendar to note (move_calendar_to_notes)
 # * [x] fix extra space left after removing [[note name]]
 # * [x] fix empty line being left when moving a calendar to note
@@ -255,11 +255,9 @@ class NPNote
         # write the note file out
         $allNotes[noteToAddTo].rewrite_file
         moved += 1
-        # n -= 1 # decrement line count as we have deleted a line FIXME:?
       else # if note not found
         puts "   Warning: can't find matching note for [[#{noteName}]]. Ignoring".colorize(WarningColour)
       end
-      # n += 1 # get ready to look at next line
     end
     return unless moved.positive?
 
@@ -427,7 +425,7 @@ class NPNote
       puts "    Error in calc_offset_date from #{old_date} by #{interval}".colorize(WarningColour)
     end
     puts "    c_o_d: with #{old_date} interval #{interval} found #{days_to_add} days_to_add" if $verbose > 1
-    newDate = old_date + days_to_add # FIXME: barfing here?
+    newDate = old_date + days_to_add
     newDate
   end
 
@@ -460,16 +458,16 @@ class NPNote
         end
       end
 
-      # find todo lines with {+3d} or {-4w} etc.
+      # find todo lines with {+3d} or {-4w} etc. plus {0d} special case
       dateOffsetString = ''
-      if (line =~ /\*\s+(\[ \])?/) && (line =~ /\{[\+\-]\d+[dwm]\}/)
+      if (line =~ /\*\s+(\[ \])?/) && (line =~ /\{[\+\-]?\d+[dwm]\}/)
         puts "    UTD: Found line '#{line.chomp}'" if $verbose > 1
-        line.scan(/\{([\+\-]\d+[dwm])\}/) { |m| dateOffsetString = m.join }
+        line.scan(/\{([\+\-]?\d+[dwm])\}/) { |m| dateOffsetString = m.join }
         if dateOffsetString != ''
           puts "    UTD: Found DOS #{dateOffsetString} in '#{line.chomp}'" if $verbose > 1
           if (currentTargetDate != '') && !lastWasTemplate
             calcDate = calc_offset_date(Date.parse(currentTargetDate), dateOffsetString)
-            # Remove the offset {-3d} text by finding string points
+            # Remove the offset text (e.g. {-3d}) by finding string points
             label_start = line.index('{') - 1
             label_end = line.index('}') + 2
             line = "#{line[0..label_start]}#{line[label_end..-2]}" # also chomp off last character (newline)
