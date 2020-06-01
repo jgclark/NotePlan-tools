@@ -1,7 +1,7 @@
 #!/usr/bin/ruby
 #-------------------------------------------------------------------------------
 # NotePlan note and calendar file cleanser
-# (c) JGC, v1.2.4, 31.5.2020
+# (c) JGC, v1.2.4, 2.6.2020
 #-------------------------------------------------------------------------------
 # See README.md file for details, how to run and configuration.
 #-------------------------------------------------------------------------------
@@ -11,6 +11,8 @@
 # * [x] fix extra space left after removing [[note name]]
 # * [x] fix empty line being left when moving a calendar to note
 # TODO:
+# * [ ] (issue #5) also move sub-tasks and comments when moving items to a [[Note]], like Archiving does (from v2.4.4)
+# * [x] (issue #6) also move headings with a [[Note]] marker and all its child tasks, notes and comments
 # * [ ] cope with moving subheads to archive as well - or is the better
 #       archiving now introduced in v2.4.4 enough?
 # * [x] (issue #2) add processing of repeating tasks (my method, not the NP one)
@@ -199,9 +201,9 @@ class NPNote
     puts "  - removed #{cleaned} tags/dates" if $verbose > 0
   end
 
-  def insert_new_task(new_line, line_number)
+  def insert_new_line(new_line, line_number)
     # Insert 'line' into position 'line_number'
-    puts '  insert_new_task ...' if $verbose > 1
+    puts '  insert_new_line ...' if $verbose > 1
     n = @lineCount # start iterating from the end of the array
     while n >= line_number
       @lines[n + 1] = @lines[n]
@@ -215,19 +217,24 @@ class NPNote
     # Move tasks with a [[note link]] to that note (inserting after header)
     puts '  move_calendar_to_notes ...' if $verbose > 1
     noteName = noteToAddTo = nil
-    n = moved = 0
+    n = 0
+    moved = 0
     while n < @lineCount
       line = @lines[n]
-      # find todo lines with [[note title]] mentions
-      if line !~ /^\s*\*.*\[\[.*\]\]/
+      is_header = false
+      # find todo or header lines with [[note title]] mentions
+      if line !~ /^\s*\*.*\[\[.*\]\]/ && line !~ /^#+\s+.*\[\[.*\]\]/
         n += 1 # get ready to look at next line
         next
       end
+      is_header = true if line =~ /^#+\s+.*\[\[.*\]\]/
 
       # the following regex matches returns an array with one item, so make a string (by join)
       # NB the '+?' gets minimum number of chars, to avoid grabbing contents of several [[notes]] in the same line
-      line.scan(/^\s*\*.*\[\[(.+?)\]\]/) { |m| noteName = m.join }
-      puts "  - found note link [[#{noteName}]]" if $verbose > 0
+      # line.scan(/^\s*\*.*\[\[(.+?)\]\]/) { |m| noteName = m.join }  # why so specific?
+      line.scan(/\[\[(.+?)\]\]/) { |m| noteName = m.join }
+      puts "  - found note link [[#{noteName}]] in header" if is_header && ($verbose > 0)
+      puts "  - found note link [[#{noteName}]] in task" if !is_header && ($verbose > 0)
 
       # find the note file to add to
       $allNotes.each do |nn|
@@ -235,26 +242,49 @@ class NPNote
       end
 
       if noteToAddTo # if note is found
-        # Remove this line from the calendar note + write file out
-        @lines.delete_at(n)
+        lines_to_output = ''
 
         # Remove the [[name]] text by finding string points
         label_start = line.index('[[') - 2 # remove space before it as well
         label_end = line.index(']]') + 2
         line = "#{line[0..label_start]}#{line[label_end..-2]}" # also chomp off last character (newline)
 
-        # If no due date specified in rest of the todo, add date from the title of the calendar file it came from
-        if line !~ />\d{4}\-\d{2}\-\d{2}/
-          cal_date = "#{@title[0..3]}-#{@title[4..5]}-#{@title[6..7]}"
-          puts "      '#{cal_date}' to add from #{@title}"
-          line += " >#{cal_date}"
+        if is_header
+          # We want to take any following lines up to the next blank line or same-level header.
+          # So incrementally add lines until we find that break.
+          header_marker = ''
+          line.scan(/^(#+)\s/) { |m| header_marker = m.join }
+          lines_to_output = line + "\n"
+          @lines.delete_at(n)
+          puts "  - starting header analysis at line #{n}" if $verbose > 1
+          n += 1
+          while n < @lineCount
+            line_to_check = @lines[n]
+            break if (line_to_check =~ /^$/) || (line_to_check =~ /^#{header_marker}\s/)
+
+            lines_to_output += line_to_check
+            # Remove this line from the calendar note
+            @lines.delete_at(n)
+            moved += 1
+          end
+        else
+          # If a todo line ...
+          # If no due date is specified in rest of the todo, add date from the title of the calendar file it came from
+          if line !~ />\d{4}\-\d{2}\-\d{2}/
+            cal_date = "#{@title[0..3]}-#{@title[4..5]}-#{@title[6..7]}"
+            puts "      '#{cal_date}' to add from #{@title}"
+            lines_to_output = line + " >#{cal_date}"
+            # Remove this line from the calendar note
+            @lines.delete_at(n)
+            moved += 1
+          end
         end
 
-        # insert updated line after header lines in the note file
-        $allNotes[noteToAddTo].insert_new_task(line, NUM_HEADER_LINES)
+        # insert updated line(s) after header lines in the note file
+        $allNotes[noteToAddTo].insert_new_line(lines_to_output, NUM_HEADER_LINES)
+
         # write the note file out
         $allNotes[noteToAddTo].rewrite_file
-        moved += 1
       else # if note not found
         puts "   Warning: can't find matching note for [[#{noteName}]]. Ignoring".colorize(WarningColour)
       end
@@ -547,7 +577,7 @@ class NPNote
 
           # Insert this new line after current line
           n += 1
-          insert_new_task(outline, n)
+          insert_new_line(outline, n)
         end
       end
       n += 1
