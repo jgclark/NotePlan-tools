@@ -11,7 +11,7 @@
 # * [x] fix extra space left after removing [[note name]]
 # * [x] fix empty line being left when moving a calendar to note
 # TODO:
-# * [ ] (issue #5) also move sub-tasks and comments when moving items to a [[Note]], like Archiving does (from v2.4.4)
+# * [x] (issue #5) also move sub-tasks and comments when moving items to a [[Note]], like Archiving does (from v2.4.4)
 # * [x] (issue #6) also move headings with a [[Note]] marker and all its child tasks, notes and comments
 # * [ ] cope with moving subheads to archive as well - or is the better
 #       archiving now introduced in v2.4.4 enough?
@@ -143,7 +143,6 @@ class NPNote
       #   i.e. YYYY-MM-DD HH:MM
       if line =~ /\(\d{4}\-\d{2}\-\d{2} \d{2}:\d{2}\)/
         line.scan(/\((\d{4}\-\d{2}\-\d{2}) \d{2}:\d{2}\)/) do |m|
-          # process_repeats(line, m) # see if this has a repeat in it @@@
           outline = line.gsub(/\(\d{4}\-\d{2}\-\d{2} \d{2}:\d{2}\)/, "(#{m[0]})") if m[0] != ''
         end
         @lines[n] = outline
@@ -233,8 +232,8 @@ class NPNote
       # NB the '+?' gets minimum number of chars, to avoid grabbing contents of several [[notes]] in the same line
       # line.scan(/^\s*\*.*\[\[(.+?)\]\]/) { |m| noteName = m.join }  # why so specific?
       line.scan(/\[\[(.+?)\]\]/) { |m| noteName = m.join }
-      puts "  - found note link [[#{noteName}]] in header" if is_header && ($verbose > 0)
-      puts "  - found note link [[#{noteName}]] in task" if !is_header && ($verbose > 0)
+      puts "  - found note link [[#{noteName}]] in header on line #{n + 1} of #{@lineCount}" if is_header && ($verbose > 0)
+      puts "  - found note link [[#{noteName}]] in task on line #{n + 1} of #{@lineCount}" if !is_header && ($verbose > 0)
 
       # find the note file to add to
       $allNotes.each do |nn|
@@ -249,15 +248,51 @@ class NPNote
         label_end = line.index(']]') + 2
         line = "#{line[0..label_start]}#{line[label_end..-2]}" # also chomp off last character (newline)
 
-        if is_header
+        if !is_header
+          # A todo line ...
+          # If no due date is specified in rest of the todo, add date from the title of the calendar file it came from
+          if line !~ />\d{4}\-\d{2}\-\d{2}/
+            cal_date = "#{@title[0..3]}-#{@title[4..5]}-#{@title[6..7]}"
+            puts "    - '#{cal_date}' to add from #{@title}" if $verbose > 1
+            lines_to_output = line + " >#{cal_date}\n"
+            # Remove this line from the calendar note
+            @lines.delete_at(n)
+            @lineCount -= 1
+            moved += 1
+
+            # We also want to take any following indented lines
+            # So incrementally add lines until we find ones at the same or lower level of indent
+            line_indent = ''
+            line.scan(/^(\s*)\*/) { |m| line_indent = m.join }
+            puts "  - starting task analysis at line #{n + 1} with indent '#{line_indent}' (#{line_indent.length})" if $verbose > 1
+
+            while n < @lineCount
+              line_to_check = @lines[n]
+              # What's the indent of this line?
+              line_to_check_indent = ''
+              line_to_check.scan(/^(\s*)\S/) { |m| line_to_check_indent = m.join }
+              puts "    - for '#{line_to_check.chomp}' indent='#{line_to_check_indent}' (#{line_to_check_indent.length})" if $verbose > 1
+              break if line_indent.length >= line_to_check_indent.length
+
+              lines_to_output += line_to_check
+              # Remove this line from the calendar note
+              @lines.delete_at(n)
+              @lineCount -= 1
+              moved += 1
+            end
+          end
+        else
+          # A header line ...
           # We want to take any following lines up to the next blank line or same-level header.
           # So incrementally add lines until we find that break.
           header_marker = ''
           line.scan(/^(#+)\s/) { |m| header_marker = m.join }
           lines_to_output = line + "\n"
           @lines.delete_at(n)
-          puts "  - starting header analysis at line #{n}" if $verbose > 1
-          n += 1
+          @lineCount -= 1
+          moved += 1
+          puts "  - starting header analysis at line #{n + 1}" if $verbose > 1
+          # n += 1
           while n < @lineCount
             line_to_check = @lines[n]
             break if (line_to_check =~ /^$/) || (line_to_check =~ /^#{header_marker}\s/)
@@ -265,17 +300,7 @@ class NPNote
             lines_to_output += line_to_check
             # Remove this line from the calendar note
             @lines.delete_at(n)
-            moved += 1
-          end
-        else
-          # If a todo line ...
-          # If no due date is specified in rest of the todo, add date from the title of the calendar file it came from
-          if line !~ />\d{4}\-\d{2}\-\d{2}/
-            cal_date = "#{@title[0..3]}-#{@title[4..5]}-#{@title[6..7]}"
-            puts "      '#{cal_date}' to add from #{@title}"
-            lines_to_output = line + " >#{cal_date}"
-            # Remove this line from the calendar note
-            @lines.delete_at(n)
+            @lineCount -= 1
             moved += 1
           end
         end
@@ -295,10 +320,10 @@ class NPNote
     puts "  - moved #{moved} lines to notes" if $verbose > 0
   end
 
-  def reorder_lines
+  def archive_lines
     # Shuffle @done and cancelled lines to relevant sections at end of the file
     # TODO: doesn't yet deal with notes with subheads in them
-    puts '  reorder_lines ...' if $verbose > 1
+    puts '  archive_lines ...' if $verbose > 1
     doneToMove = [] # NB: zero-based
     doneToMoveLength = [] # NB: zero-based
     cancToMove = [] # NB: zero-based
@@ -731,10 +756,9 @@ if n.positive? # if we have some notes to work on ...
     note.remove_empty_tasks
     note.remove_tags_dates
     note.process_repeats
-    # note.clean_dates # now replaced by process_repeats
     note.move_calendar_to_notes if note.is_calendar
     note.use_template_dates unless note.is_calendar
-    # note.reorder_lines
+    # note.archive_lines
     # If there have been changes, write out the file
     note.rewrite_file if note.is_updated
     i += 1
