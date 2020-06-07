@@ -8,6 +8,7 @@ When cleaning, it
 1. moves any calendar entries with `[[Note link]]` in it to that note, directly after the header section. Further:
    1. where the line is a task, it moves the task and any following indented lines (optionally terminated by a blank line)
    2. where the line is a heading, it moves the heading and all following lines until a blank line, or the next heading of the same level
+However, this can be turned off using the `-n` option.
 2. changes any mentions of **date offset patterns** (e.g. `{-10d}`, `{+2w}`, `{-3m}` or special case `{0d}`) to being scheduled dates (e.g. `>2020-02-27`), if it can find a DD-MM-YYYY date pattern in the previous markdown heading. (It also ignores offsets in a section with a heading that includes a #template hashtag.)
 3. for newly completed tasks with a `@repeat(_interval_)` **create a new repeat** of the task on the appropriate future date. (Valid intervals are `[0-9][dwmqy]`.) There are two types of _interval_:
   - When _interval_ is of the form `+2w` it will duplicate the task for 2 weeks after the date the task was completed.
@@ -22,6 +23,7 @@ It works with both iCloud or Dropbox storage.
 
 You can also specific command-line options: 
 - `-h` for help, 
+- `-n` to turn off moving mentions of [[Note]] in a calendar day file to the [[Note]]
 - `-v` for verbose output 
 - `-w` for more verbose output
 

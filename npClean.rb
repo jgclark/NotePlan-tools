@@ -1,7 +1,7 @@
 #!/usr/bin/ruby
 #-------------------------------------------------------------------------------
 # NotePlan note and calendar file cleanser
-# by Jonathan Clark, v1.2.5, 7.6.2020
+# by Jonathan Clark, v1.2.6, 8.6.2020
 #-------------------------------------------------------------------------------
 # See README.md file for details, how to run and configuration.
 #-------------------------------------------------------------------------------
@@ -119,30 +119,6 @@ class NPNote
       @title = tempTitle.gsub(/\s+$/, '')
       @is_calendar = false
     end
-  end
-
-  def clean_dates
-    # remove HH:MM part of @done(...) date-time stamps
-    puts '  clean_dates ...' if $verbose > 1
-    n = cleaned = 0
-    line = outline = ''
-    while n < @lineCount
-      line = @lines[n]
-      # find lines with date-time to shorten, and capture date part of it
-      #   i.e. YYYY-MM-DD HH:MM
-      if line =~ /\(\d{4}\-\d{2}\-\d{2} \d{2}:\d{2}\)/
-        line.scan(/\((\d{4}\-\d{2}\-\d{2}) \d{2}:\d{2}\)/) do |m|
-          outline = line.gsub(/\(\d{4}\-\d{2}\-\d{2} \d{2}:\d{2}\)/, "(#{m[0]})") if m[0] != ''
-        end
-        @lines[n] = outline
-        cleaned += 1
-      end
-      n += 1
-    end
-    return unless cleaned.positive?
-
-    @is_updated = true
-    puts "  - cleaned #{cleaned} dates" if $verbose > 1
   end
 
   def remove_empty_tasks
@@ -539,6 +515,9 @@ class NPNote
     # after the date the task was last due. If this can't be determined,
     # then default to the first option.
     # Valid intervals are [0-9][dwmqy].
+    #
+    # To work it relies on finding @done(YYYY-MM-DD HH:MM) tags that haven't yet been
+    # shortened to @done(YYYY-MM-DD).
     puts '  process_repeats ...' if $verbose > 1
     n = cleaned = 0
     outline = ''
@@ -625,16 +604,20 @@ options = {}
 opt_parser = OptionParser.new do |opts|
   opts.banner = 'Usage: npClean.rb [options] file-pattern'
   opts.separator ''
+  options[:move] = 1
   options[:verbose] = 0
+  opts.on('-h', '--help', 'Show help') do
+    puts opts
+    exit
+  end
+  opts.on('-n', '--nomove', "Don't move calendar items with [[Note]] to the Note") do
+    options[:move] = 0
+  end
   opts.on('-v', '--verbose', 'Show information as I work') do
     options[:verbose] = 1
   end
   opts.on('-w', '--moreverbose', 'Show more information as I work') do
     options[:verbose] = 2
-  end
-  opts.on('-h', '--help', 'Show help') do
-    puts opts
-    exit
   end
 end
 opt_parser.parse! # parse out options, leaving file patterns to process
@@ -746,7 +729,7 @@ if n.positive? # if we have some notes to work on ...
     note.remove_empty_tasks
     note.remove_tags_dates
     note.process_repeats
-    note.move_calendar_to_notes if note.is_calendar
+    note.move_calendar_to_notes if note.is_calendar && options[:move] == 1
     note.use_template_dates unless note.is_calendar
     # note.archive_lines
     # If there have been changes, write out the file
