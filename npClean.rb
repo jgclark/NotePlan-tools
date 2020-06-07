@@ -312,6 +312,7 @@ class NPNote
         $allNotes[noteToAddTo].rewrite_file
       else # if note not found
         puts "   Warning: can't find matching note for [[#{noteName}]]. Ignoring".colorize(WarningColour)
+        n += 1
       end
     end
     return unless moved.positive?
