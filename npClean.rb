@@ -1,7 +1,7 @@
 #!/usr/bin/ruby
 #-------------------------------------------------------------------------------
 # NotePlan note and calendar file cleanser
-# (c) JGC, v1.2.4, 2.6.2020
+# by Jonathan Clark, v1.2.5, 7.6.2020
 #-------------------------------------------------------------------------------
 # See README.md file for details, how to run and configuration.
 #-------------------------------------------------------------------------------
@@ -22,17 +22,6 @@
 # * [x] add colouration of output (https://github.com/fazibear/colorize)
 # * [x] change to move closed and open tasks with [[Note]] mentions
 #-------------------------------------------------------------------------------
-# Spec for subheads etc.
-# Read all into a more detailed data structure and then write out?
-#  - Title line
-#  - 1 or 2 metadata lines, starting with #tag or Aim:
-#  - open section
-#    - (opt) Heading line
-#      - (opt) Sub-heading
-#        - (opt) Task
-#        - indented lines of comment or bullet or just text
-#  - done section ('#[#] Done') -- to include cancelled, unlike NP built-in behaviour
-#    - as above
 
 require 'date'
 require 'time'
