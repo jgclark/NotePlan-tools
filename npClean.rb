@@ -11,11 +11,11 @@
 # * [x] fix extra space left after removing [[note name]]
 # * [x] fix empty line being left when moving a calendar to note
 # TODO:
+# * [x] (issue #2) add processing of repeating tasks (my method, not the NP one)
 # * [x] (issue #5) also move sub-tasks and comments when moving items to a [[Note]], like Archiving does (from v2.4.4)
 # * [x] (issue #6) also move headings with a [[Note]] marker and all its child tasks, notes and comments
-# * [ ] cope with moving subheads to archive as well - or is the better
+# * [ ] (issue #9) cope with moving subheads to archive as well - or is the better
 #       archiving now introduced in v2.4.4 enough?
-# * [x] (issue #2) add processing of repeating tasks (my method, not the NP one)
 # * [x] issue 1: add ability to find and clean notes in folders (from NP v2.5), excluding @Archive and @Trash folders
 # * [x] add command-line parameters, particularly for verbose level
 # * [x] update {-2d} etc. dates according to previous due date
