@@ -522,8 +522,8 @@ class NPNote
             puts "    Used #{dateOffsetString} line to make '#{line.chomp}'" if $verbose > 1
             # Now write out calcDate
             @is_updated = true
-          else
-            puts "    Warning: in use_template_dates no currentTargetDate before line '#{line.chomp}'".colorize(WarningColour) if $verbose > 0
+          elsif $verbose > 0
+            puts "    Warning: in use_template_dates no currentTargetDate before line '#{line.chomp}'".colorize(WarningColour)
           end
         end
       end
@@ -597,6 +597,24 @@ class NPNote
       end
       n += 1
     end
+  end
+
+  def remove_empty_trailing_lines
+    # go backwards through the note, deleting any blanks at the end
+    puts '  remove_empty_trailing_lines ...' if $verbose > 1
+    cleaned = 0
+    n = @lineCount
+    while n.positive?
+      if @lines[n] =~ /$^/
+        @lines.delete_at(n)
+        cleaned += 1
+      end
+      n -= 1
+    end
+    return unless cleaned.positive?
+
+    @is_updated = true
+    puts "  - removed #{cleaned} empty lines" if $verbose > 1
   end
 
   def rewrite_file
@@ -744,6 +762,7 @@ if n.positive? # if we have some notes to work on ...
   $notes.each do |note|
     puts "Cleaning file id #{note.id} " + note.title.to_s.bold if $verbose > 0
     note.remove_empty_tasks
+    note.remove_empty_trailing_lines
     note.remove_tags_dates
     note.process_repeats
     note.move_calendar_to_notes if note.is_calendar
