@@ -12,7 +12,7 @@
 # * [x] fix empty line being left when moving a calendar to note
 # TODO:
 # * [x] (issue #2) add processing of repeating tasks (my method, not the NP one)
-# * [ ] (issue #5) also move sub-tasks and comments when moving items to a [[Note]], 
+# * [ ] (issue #5) also move sub-tasks and comments when moving items to a [[Note]],
 #       like Archiving does (from v2.4.4).
 # * [x] (issue #6) also move headings with a [[Note]] marker and all its child tasks, notes and comments
 # * [ ] (issue #9) cope with moving subheads to archive as well - or is the better
@@ -221,19 +221,21 @@ class NPNote
             cal_date = "#{@title[0..3]}-#{@title[4..5]}-#{@title[6..7]}"
             puts "    - '#{cal_date}' to add from #{@title}" if $verbose > 1
             lines_to_output = line + " >#{cal_date}\n"
+          else
+            lines_to_output = line
           end
+          # puts "    - '#{lines_to_output}' and now n=#{n + 1}" if $verbose > 1
+          # Work out indent level of current line
+          line_indent = ''
+          line.scan(/^(\s*)\*/) { |m| line_indent = m.join }
+          puts "  - starting task analysis at line #{n + 1} with indent '#{line_indent}' (#{line_indent.length})" if $verbose > 1
           # Remove this line from the calendar note
           @lines.delete_at(n)
           @lineCount -= 1
           moved += 1
-          puts "    - '#{lines_to_output}' and now n=#{n+1}" if $verbose > 1
-
+          
           # We also want to take any following indented lines
           # So incrementally add lines until we find ones at the same or lower level of indent
-          line_indent = ''
-          line.scan(/^(\s*)\*/) { |m| line_indent = m.join }
-          puts "  - starting task analysis at line #{n + 1} with indent '#{line_indent}' (#{line_indent.length})" if $verbose > 1
-
           while n < @lineCount
             line_to_check = @lines[n]
             # What's the indent of this line?
@@ -750,7 +752,7 @@ if n.positive? # if we have some notes to work on ...
     note.remove_empty_trailing_lines
     note.remove_tags_dates
     note.process_repeats
-    # note.move_calendar_to_notes if note.is_calendar && options[:move] == 1
+    note.move_calendar_to_notes if note.is_calendar && options[:move] == 1
     note.use_template_dates unless note.is_calendar
     # note.archive_lines
     # If there have been changes, write out the file
