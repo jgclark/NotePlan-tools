@@ -1,27 +1,13 @@
 #!/usr/bin/ruby
 #-------------------------------------------------------------------------------
 # NotePlan note and calendar file cleanser
-# by Jonathan Clark, v1.2.7, 9.6.2020
+# by Jonathan Clark, v1.2.8, 13.6.2020
 #-------------------------------------------------------------------------------
 # See README.md file for details, how to run and configuration.
 #-------------------------------------------------------------------------------
-# FIXME:
-# * [x] (issue #3) template mechanism failing for {0d}
-# * [x] (issue #4) include date when moving from calendar to note (move_calendar_to_notes)
-# * [x] fix extra space left after removing [[note name]]
-# * [x] fix empty line being left when moving a calendar to note
 # TODO:
-# * [x] (issue #2) add processing of repeating tasks (my method, not the NP one)
-# * [ ] (issue #5) also move sub-tasks and comments when moving items to a [[Note]],
-#       like Archiving does (from v2.4.4).
-# * [x] (issue #6) also move headings with a [[Note]] marker and all its child tasks, notes and comments
 # * [ ] (issue #9) cope with moving subheads to archive as well - or is the better
 #       archiving now introduced in v2.4.4 enough?
-# * [x] issue 1: add ability to find and clean notes in folders (from NP v2.5), excluding @Archive and @Trash folders
-# * [x] add command-line parameters, particularly for verbose level
-# * [x] update {-2d} etc. dates according to previous due date
-# * [x] add colouration of output (https://github.com/fazibear/colorize)
-# * [x] change to move closed and open tasks with [[Note]] mentions
 #-------------------------------------------------------------------------------
 
 require 'date'
@@ -188,7 +174,7 @@ class NPNote
       line = @lines[n]
       is_header = false
       # find todo or header lines with [[note title]] mentions
-      if line !~ /^\s*\*.*\[\[.*\]\]/ && line !~ /^#+\s+.*\[\[.*\]\]/
+      if line !~ /^#+\s+.*\[\[.*\]\]|^\s*.*\[\[.*\]\]/
         n += 1 # get ready to look at next line
         next
       end
@@ -233,7 +219,7 @@ class NPNote
           @lines.delete_at(n)
           @lineCount -= 1
           moved += 1
-          
+
           # We also want to take any following indented lines
           # So incrementally add lines until we find ones at the same or lower level of indent
           while n < @lineCount
@@ -264,10 +250,12 @@ class NPNote
           # n += 1
           while n < @lineCount
             line_to_check = @lines[n]
+            puts "    - l_t_o checking '#{line_to_check}'"
             break if (line_to_check =~ /^$/) || (line_to_check =~ /^#{header_marker}\s/)
 
             lines_to_output += line_to_check
             # Remove this line from the calendar note
+            puts "    - @lineCount now #{@lineCount}"
             @lines.delete_at(n)
             @lineCount -= 1
             moved += 1
@@ -586,13 +574,14 @@ class NPNote
     # go backwards through the note, deleting any blanks at the end
     puts '  remove_empty_trailing_lines ...' if $verbose > 1
     cleaned = 0
-    n = @lineCount
+    n = @lineCount - 1
     while n.positive?
-      if @lines[n] =~ /$^/
-        @lines.delete_at(n)
-        cleaned += 1
-      end
+      line_to_test = @lines[n]
+      break unless line_to_test =~ /^$/
+
+      @lines.delete_at(n)
       n -= 1
+      cleaned += 1
     end
     return unless cleaned.positive?
 
