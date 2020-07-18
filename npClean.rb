@@ -1,13 +1,12 @@
 #!/usr/bin/ruby
 #-------------------------------------------------------------------------------
 # NotePlan note and calendar file cleanser
-# by Jonathan Clark, v1.2.8, 13.6.2020
+# by Jonathan Clark, v1.3.0, 19.7.2020
 #-------------------------------------------------------------------------------
 # See README.md file for details, how to run and configuration.
+# And the rest of this GitHub repository:
+#   https://github.com/jgclark/NotePlan-cleaner/
 #-------------------------------------------------------------------------------
-# TODO:
-# * [ ] (issue #9) cope with moving subheads to archive as well - or is the better
-#       archiving now introduced in v2.4.4 enough?
 #-------------------------------------------------------------------------------
 
 require 'date'
@@ -19,7 +18,7 @@ require 'optparse' # more details at https://docs.ruby-lang.org/en/2.1.0/OptionP
 # Setting variables to tweak
 USERNAME = 'jonathan'.freeze # change me
 NUM_HEADER_LINES = 3 # suits my use, but probably wants to be 1 for most people
-STORAGE_TYPE = 'iCloud'.freeze # or Dropbox
+STORAGE_TYPE = 'CloudKit'.freeze # or Dropbox
 TAGS_TO_REMOVE = ['#waiting', '#high'].freeze # simple array of strings
 DATE_FORMAT = '%d.%m.%y'.freeze
 DATE_TIME_FORMAT = '%e %b %Y %H:%M'.freeze
@@ -27,10 +26,12 @@ DATE_TIME_FORMAT = '%e %b %Y %H:%M'.freeze
 # Other Constants
 TodaysDate = Date.today # can't work out why this needs to be a 'constant' to work -- something about visibility, I suppose
 User = Etc.getlogin # for debugging when running by launchctl
-NP_BASE_DIR = if STORAGE_TYPE == 'iCloud'
-                "/Users/#{USERNAME}/Library/Mobile Documents/iCloud~co~noteplan~NotePlan/Documents" # for iCloud storage
-              else
+NP_BASE_DIR = if STORAGE_TYPE == 'Dropbox'
                 "/Users/#{USERNAME}/Dropbox/Apps/NotePlan/Documents" # for Dropbox storage
+              elsif STORAGE_TYPE == 'CloudKit'
+                "/Users/#{USERNAME}/Library/Application Support/co.noteplan.NotePlan3" # for CloudKit storage
+              else
+                "/Users/#{USERNAME}/Library/Mobile Documents/iCloud~co~noteplan~NotePlan/Documents" # for iCloud storage (default)
               end
 NP_NOTES_DIR = "#{NP_BASE_DIR}/Notes".freeze
 NP_CALENDAR_DIR = "#{NP_BASE_DIR}/Calendar".freeze

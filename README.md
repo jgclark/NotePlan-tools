@@ -32,7 +32,7 @@ You can also specific command-line options:
 
 ## Configuration
 Set the following constants at the top of the file:
-- `StorageType`: select whether you're using iCloud for storage (the default) or Dropbox
+- `StorageType`: select whether you're using `iCloud` for storage (the default) or `CloudKit` (from v3.0) or `Drobpox`. If you're not sure, see NotePlan's `Sync Settings`.
 - `NumHeaderLines`: number of lines at the start of a note file to regard as the header. The default is 1. Relevant when moving lines around.
 - `Username`: your username
 - `TagsToRemove`: list of tags to remove. Default ["#waiting","#high"]
