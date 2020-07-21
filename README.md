@@ -37,6 +37,8 @@ Set the following constants at the top of the file:
 - `Username`: your username
 - `TagsToRemove`: list of tags to remove. Default ["#waiting","#high"]
 
+Requires installation of gems `colorize` and  `optparse` (> gem install colorize optparse).
+
 ## Automatic running
 If you wish to run this automatically in the background on macOS, you can do this using the launchctl system. Here's the configuration file `jgc.npClean.plist` that I use to run npClean several times a day:
 ```

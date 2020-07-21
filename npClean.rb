@@ -7,7 +7,6 @@
 # And the rest of this GitHub repository:
 #   https://github.com/jgclark/NotePlan-cleaner/
 #-------------------------------------------------------------------------------
-#-------------------------------------------------------------------------------
 
 require 'date'
 require 'time'
