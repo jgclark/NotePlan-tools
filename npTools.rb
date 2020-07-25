@@ -1,11 +1,12 @@
 #!/usr/bin/ruby
 #-------------------------------------------------------------------------------
-# NotePlan feature extender
+# NotePlan Tools script
 # by Jonathan Clark, v1.4.0, 25.7.2020
 #-------------------------------------------------------------------------------
 # See README.md file for details, how to run and configure it.
-# Repository: https://github.com/jgclark/NotePlan-extender/
+# Repository: https://github.com/jgclark/NotePlan-tools/
 #-------------------------------------------------------------------------------
+VERSION = '1.4.0'.freeze
 
 require 'date'
 require 'time'
@@ -54,9 +55,10 @@ $allNotes = []  # to hold all note objects
 $notes    = []  # to hold all relevant note objects
 
 #-------------------------------------------------------------------------
-# Class definition: NPNote (here covers Note *and* Calendar files)
+# Class definition: NPFile
+# NOTE: in this script it covers Note *and* Daily files
 #-------------------------------------------------------------------------
-class NPNote
+class NPFile
   # Define the attributes that need to be visible outside the class instances
   attr_reader :id
   attr_reader :title
@@ -614,7 +616,7 @@ end
 # Setup program options
 options = {}
 opt_parser = OptionParser.new do |opts|
-  opts.banner = 'Usage: npClean.rb [options] file-pattern'
+  opts.banner = "NotePlan tools v#{VERSION}. Details at https://github.com/jgclark/NotePlan-tools/\nUsage: npTools.rb [options] [file-pattern]"
   opts.separator ''
   options[:move] = 1
   options[:verbose] = 0
@@ -622,7 +624,7 @@ opt_parser = OptionParser.new do |opts|
     puts opts
     exit
   end
-  opts.on('-n', '--nomove', "Don't move calendar items with [[Note]] to the Note") do
+  opts.on('-n', '--nomove', "Don't move Daily items with [[Note]] to the Note") do
     options[:move] = 0
   end
   opts.on('-v', '--verbose', 'Show information as I work') do
@@ -642,18 +644,18 @@ begin
   Dir.glob('**/*.txt').each do |this_file|
     next unless this_file =~ /^[^@]/ # as can't get file glob including [^@] to work
 
-    $allNotes[i] = NPNote.new(this_file, i)
+    $allNotes[i] = NPFile.new(this_file, i)
     i += 1
   end
   puts "Read in all #{i} notes files" if $verbose > 0
 rescue StandardError => e
   puts "ERROR: #{e.exception.message} when reading in all notes files".colorize(WarningColour)
 end
-n = 0 # number of notes and calendar entries to work on
+n = 0 # number of notes and daily entries to work on
 
 if ARGV.count.positive?
   # We have a file pattern given, so find that (starting in the notes directory), and use it
-  puts "Starting npClean at #{time_now_fmttd} for files matching pattern(s) #{ARGV}."
+  puts "Starting npTools at #{time_now_fmttd} for files matching pattern(s) #{ARGV}."
   begin
     Dir.chdir(NP_NOTES_DIR)
     ARGV.each do |pattern|
@@ -670,7 +672,7 @@ if ARGV.count.positive?
       end
     end
   rescue StandardError => e
-    puts "ERROR: #{e.exception.message} when reading in notes matching pattern #{pattern}".colorize(WarningColour)
+    puts "ERROR: #{e.exception.message} when reading in Notes matching pattern #{pattern}".colorize(WarningColour)
   end
 
   # if no matching notes, continue by looking in the calendar directory
@@ -679,20 +681,20 @@ if ARGV.count.positive?
       Dir.chdir(NP_CALENDAR_DIR)
       ARGV.each do |pattern|
         Dir.glob(pattern).each do |this_file|
-          $notes[n] = NPNote.new(this_file, n)
+          $notes[n] = NPFile.new(this_file, n)
           n += 1
         end
       end
     rescue StandardError => e
-      puts "ERROR: #{e.exception.message} when reading in calendar files".colorize(WarningColour)
+      puts "ERROR: #{e.exception.message} when reading in Daily files".colorize(WarningColour)
     end
   end
 
 else
-  # Read metadata for all note files in the NotePlan directory,
+  # Read metadata for all Note files in the NotePlan directory,
   # and find those altered in the last 24hrs
   mtime = 0
-  puts "Starting npClean at #{time_now_fmttd} for all Note and Calendar files altered in last 24 hours."
+  puts "Starting npTools at #{time_now_fmttd} for all NP files altered in last #{HOURS_TO_PROCESS} hours."
   begin
     Dir.chdir(NP_NOTES_DIR)
     Dir.glob('**/*.txt').each do |this_file|
@@ -714,17 +716,17 @@ else
     puts "ERROR: #{e.exception.message} when finding recently changed files".colorize(WarningColour)
   end
 
-  # Also read metadata for all calendar files in the NotePlan directory,
+  # Also read metadata for all Daily files in the NotePlan directory,
   # and find those altered in the last 24hrs
   begin
     Dir.chdir(NP_CALENDAR_DIR)
     Dir.glob('*.txt').each do |this_file|
       # if modified time (mtime) in the last
       mtime = File.mtime(this_file)
-      next unless mtime > (time_now - 86_400)
+      next unless mtime > (time_now - HOURS_TO_PROCESS * 60 * 60)
 
       # read the calendar file in
-      $notes[n] = NPNote.new(this_file, n)
+      $notes[n] = NPFile.new(this_file, n)
       n += 1
     end
   rescue StandardError => e
@@ -733,8 +735,8 @@ else
 end
 
 if n.positive? # if we have some notes to work on ...
-  # puts "Found #{n} notes to attempt to clean:"
-  # For each NP file to clean, do the cleaning:
+  # puts "Found #{n} notes to process:"
+  # For each NP file to process, do the following:
   i = 0
   $notes.each do |note|
     puts "Cleaning file id #{note.id} " + note.title.to_s.bold if $verbose > 0
