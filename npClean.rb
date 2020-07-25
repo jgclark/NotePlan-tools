@@ -1,11 +1,10 @@
 #!/usr/bin/ruby
 #-------------------------------------------------------------------------------
-# NotePlan note and calendar file cleanser
-# by Jonathan Clark, v1.3.0, 19.7.2020
+# NotePlan feature extender
+# by Jonathan Clark, v1.4.0, 25.7.2020
 #-------------------------------------------------------------------------------
-# See README.md file for details, how to run and configuration.
-# And the rest of this GitHub repository:
-#   https://github.com/jgclark/NotePlan-cleaner/
+# See README.md file for details, how to run and configure it.
+# Repository: https://github.com/jgclark/NotePlan-extender/
 #-------------------------------------------------------------------------------
 
 require 'date'
@@ -15,22 +14,23 @@ require 'colorize'
 require 'optparse' # more details at https://docs.ruby-lang.org/en/2.1.0/OptionParser.html
 
 # Setting variables to tweak
-USERNAME = 'jonathan'.freeze # change me
+USERNAME = 'jonathan'.freeze # change me to your macOS account username
+STORAGE_TYPE = 'CloudKit'.freeze # or Dropbox or iCloudDrive
+HOURS_TO_PROCESS = 24 # by default will process all files changed within this number of hours
 NUM_HEADER_LINES = 3 # suits my use, but probably wants to be 1 for most people
-STORAGE_TYPE = 'CloudKit'.freeze # or Dropbox
 TAGS_TO_REMOVE = ['#waiting', '#high'].freeze # simple array of strings
-DATE_FORMAT = '%d.%m.%y'.freeze
-DATE_TIME_FORMAT = '%e %b %Y %H:%M'.freeze
+DATE_TIME_FORMAT = '%e %b %Y %H:%M'.freeze # only used in logging
 
+#-------------------------------------------------------------------------------
 # Other Constants
 TodaysDate = Date.today # can't work out why this needs to be a 'constant' to work -- something about visibility, I suppose
 User = Etc.getlogin # for debugging when running by launchctl
 NP_BASE_DIR = if STORAGE_TYPE == 'Dropbox'
                 "/Users/#{USERNAME}/Dropbox/Apps/NotePlan/Documents" # for Dropbox storage
-              elsif STORAGE_TYPE == 'CloudKit'
-                "/Users/#{USERNAME}/Library/Application Support/co.noteplan.NotePlan3" # for CloudKit storage
-              else
+              elsif STORAGE_TYPE == 'iCloudDrive'
                 "/Users/#{USERNAME}/Library/Mobile Documents/iCloud~co~noteplan~NotePlan/Documents" # for iCloud storage (default)
+              else
+                "/Users/#{USERNAME}/Library/Application Support/co.noteplan.NotePlan3" # for CloudKit storage
               end
 NP_NOTES_DIR = "#{NP_BASE_DIR}/Notes".freeze
 NP_CALENDAR_DIR = "#{NP_BASE_DIR}/Calendar".freeze
@@ -500,16 +500,17 @@ class NPNote
   end
 
   def process_repeats
-    # process any completed tasks with @repeat(..) tags
+    # process any completed (or cancelled) tasks with @repeat(..) tags
     # When interval is of the form +2w it will duplicate the task for 2 weeks
     # after the date is was completed.
     # When interval is of the form 2w it will duplicate the task for 2 weeks
     # after the date the task was last due. If this can't be determined,
     # then default to the first option.
     # Valid intervals are [0-9][dwmqy].
-    #
     # To work it relies on finding @done(YYYY-MM-DD HH:MM) tags that haven't yet been
     # shortened to @done(YYYY-MM-DD).
+    # It includes cancelled tasks as well; to remove a repeat entirely, remoce
+    # the @repeat tag.
     puts '  process_repeats ...' if $verbose > 1
     n = cleaned = 0
     outline = ''
@@ -699,7 +700,7 @@ else
 
       # if modified time (mtime) in the last 24 hours
       mtime = File.mtime(this_file)
-      next unless mtime > (time_now - 86_400)
+      next unless mtime > (time_now - HOURS_TO_PROCESS * 60 * 60)
 
       # Note has already been read in; so now just find which one to point to
       $allNotes.each do |an|
