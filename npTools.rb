@@ -522,10 +522,10 @@ class NPFile
       completed_date = ''
       # find lines with date-time to shorten, and capture date part of it
       # i.e. @done(YYYY-MM-DD HH:MM)
-      if line =~ /@done\(\d{4}\-\d{2}\-\d{2} \d{2}:\d{2}\)/
+      if line =~ /@done\(\d{4}\-\d{2}\-\d{2} \d{2}:\d{2}(?:.(?:AM|PM))?\)/
         # get completed date
-        line.scan(/\((\d{4}\-\d{2}\-\d{2}) \d{2}:\d{2}\)/) { |m| completed_date = m.join }
-        updated_line = line.gsub(/\(\d{4}\-\d{2}\-\d{2} \d{2}:\d{2}\)/, "(#{completed_date})")
+        line.scan(/\((\d{4}\-\d{2}\-\d{2}) \d{2}:\d{2}(?:.(?:AM|PM))?\)/) { |m| completed_date = m.join }
+        updated_line = line.gsub(/\(\d{4}\-\d{2}\-\d{2} \d{2}:\d{2}(?:.(?:AM|PM))?\)/, "(#{completed_date})")
         @lines[n] = updated_line
         cleaned += 1
         @is_updated = true
