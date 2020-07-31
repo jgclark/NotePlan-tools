@@ -1,12 +1,12 @@
 #!/usr/bin/ruby
 #-------------------------------------------------------------------------------
 # NotePlan Tools script
-# by Jonathan Clark, v1.4.0, 25.7.2020
+# by Jonathan Clark, v1.4.1, 1.8.2020
 #-------------------------------------------------------------------------------
 # See README.md file for details, how to run and configure it.
 # Repository: https://github.com/jgclark/NotePlan-tools/
 #-------------------------------------------------------------------------------
-VERSION = '1.4.0'.freeze
+VERSION = '1.4.1'.freeze
 
 require 'date'
 require 'time'
@@ -51,8 +51,8 @@ InstructionColour = :light_cyan
 
 # Variables that need to be globally available
 $verbose = 0
-$archive = 1
-$remove_schedules = 1
+$archive = 0
+$remove_scheduled = 1
 $allNotes = []  # to hold all note objects
 $notes    = []  # to hold all relevant note objects
 
@@ -136,11 +136,11 @@ class NPFile
     n = cleaned = 0
     while n < @lineCount
       # remove any >YYYY-MM-DD on completed or cancelled tasks
-      if ($remove_schedules > 0)
-      if (@lines[n] =~ /\s>\d{4}\-\d{2}\-\d{2}/) && (@lines[n] =~ /\[(x|-)\]/)
-        @lines[n].gsub!(/\s>\d{4}\-\d{2}\-\d{2}/, '')
-        cleaned += 1
-      end
+      if ($remove_scheduled == 1)
+        if (@lines[n] =~ /\s>\d{4}\-\d{2}\-\d{2}/) && (@lines[n] =~ /\[(x|-)\]/)
+          @lines[n].gsub!(/\s>\d{4}\-\d{2}\-\d{2}/, '')
+          cleaned += 1
+        end
       end
 
       # Remove any tags from the TagsToRemove list. Iterate over that array:
@@ -284,7 +284,6 @@ class NPFile
     puts "  - moved #{moved} lines to notes" if $verbose > 0
   end
 
-  if ($archive > 0)
   def archive_lines
     # Shuffle @done and cancelled lines to relevant sections at end of the file
     # TODO: doesn't yet deal with notes with subheads in them
@@ -422,7 +421,6 @@ class NPFile
 
     # Finally mark note as updated
     @is_updated = true
-  end
   end
 
   def calc_offset_date(old_date, interval)
@@ -625,21 +623,21 @@ opt_parser = OptionParser.new do |opts|
   opts.banner = "NotePlan tools v#{VERSION}. Details at https://github.com/jgclark/NotePlan-tools/\nUsage: npTools.rb [options] [file-pattern]"
   opts.separator ''
   options[:move] = 1
-  options[:archive] = 1
-  options[:remove_schedules] = 1
+  options[:archive] = 0 # default off at the moment as feature isn't complete
+  options[:remove_scheduled] = 1
   options[:verbose] = 0
-  opts.on('-h', '--help', 'Show help') do
+  opts.on('-a', '--noarchive', "Don't archive completed tasks into the ## Done section") do
+    options[:archive] = 0
+  end
+  opts.on('-h', '--help', 'Show this help') do
     puts opts
     exit
   end
   opts.on('-n', '--nomove', "Don't move Daily items with [[Note]] to the Note") do
     options[:move] = 0
   end
-  opts.on('-a', '--noarchive', "Don't archive completed tasks into the ## Done section") do
-    options[:archive] = 0
-  end
   opts.on('-s', '--keepschedules', "Keep the scheduled (>) dates of completed tasks") do
-    options[:remove_schedules] = 0
+    options[:remove_scheduled] = 0
   end
   opts.on('-v', '--verbose', 'Show information as I work') do
     options[:verbose] = 1
@@ -651,7 +649,7 @@ end
 opt_parser.parse! # parse out options, leaving file patterns to process
 $verbose = options[:verbose]
 $archive = options[:archive]
-$remove_schedules = options[:remove_schedules]
+$remove_scheduled = options[:remove_scheduled]
 
 # Read in all notes files (including sub-directories, but excluding /@Archive and /@Trash)
 i = 0
@@ -762,7 +760,7 @@ if n.positive? # if we have some notes to work on ...
     note.process_repeats
     note.move_calendar_to_notes if note.is_calendar && options[:move] == 1
     note.use_template_dates unless note.is_calendar
-    # note.archive_lines
+    note.archive_lines if $archive == 1
     # If there have been changes, write out the file
     note.rewrite_file if note.is_updated
     i += 1
