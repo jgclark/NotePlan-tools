@@ -1,5 +1,5 @@
 # NotePlan Tools
-`npTools.rb` is a Ruby script that adds funationality to the [NotePlan app](https://noteplan.co/). Particularly when run frequently, this provides a more flexible system of repeating tasks, allows for due dates to be expressed as offsets which allows for templates, and moves or files items from Daily files to Note files. It incorporates an ealier script to 'clean' or tidy up NotePlan's data files.
+`npTools.rb` is a Ruby script that adds functionality to the [NotePlan app](https://noteplan.co/). Particularly when run frequently, this provides a more flexible system for repeating tasks, allows for due dates to be expressed as offsets which allows for templates, and moves or files items from Daily files to Note files. It incorporates an earlier script to 'clean' or tidy up NotePlan's data files.
 
 Each time the script runs, it:
 
@@ -18,6 +18,7 @@ Changes any mentions of **date offset patterns** (e.g. `{-10d}`, `{+2w}`, `{-3m}
 - Valid intervals are specified as `[+][0-9][dwmqy]`. This allows for `d`ays, `w`eeks, `m`onths, `q`uarters or `y`ears.
 - There's also the special case `{0d}` meaning on the day itself
 - It also ignores offsets in a section with a heading that includes a #template hashtag.
+- TODO: You can configure the format of the date it's looking for with the @@@ variable (see below).
 
 | This example ...                                                                                                                                                                        | ... becomes                                                                                                                                                                                                 |
 | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -61,16 +62,16 @@ If you wish to run this automatically in the background on macOS, you can do thi
 ```
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<!-- To load this:   launchctl load ~/Library/LaunchAgents/jgc.npClean.plist
-     To unload this: launchctl unload ~/Library/LaunchAgents/jgc.npClean.plist -->
+<!-- To load this:   launchctl load ~/Library/LaunchAgents/jgc.npTools.plist
+     To unload this: launchctl unload ~/Library/LaunchAgents/jgc.npTools.plist -->
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>jgc.npClean</string>
+    <string>jgc.npTools</string>
     <key>ProgramArguments</key>
     <array>
         <string>/usr/bin/ruby</string>
-        <string>/Users/jonathan/bin/npClean</string>
+        <string>/Users/jonathan/bin/npTools</string>
     </array>
     <key>StartCalendarInterval</key>
     <array>
@@ -94,16 +95,16 @@ If you wish to run this automatically in the background on macOS, you can do thi
         </dict>
      </array>
     <key>StandardOutPath</key>
-     <string>/tmp/jgc.npClean.stdout</string>
+     <string>/tmp/jgc.npTools.stdout</string>
      <key>StandardErrorPath</key>
-     <string>/tmp/jgc.npClean.stderr</string>
+     <string>/tmp/jgc.npTools.stderr</string>
 </dict>
 </plist>
 ```
 Update the filepaths to suit your particular configuration, place this in the `~/Library/LaunchAgents` directory,  and then run the following terminal command:
 ```
-launchctl load ~/Library/LaunchAgents/jgc.npClean.plist
+launchctl load ~/Library/LaunchAgents/jgc.npTools.plist
 ```
 
-## TODO
+## Problems? Suggestions?
 See the [GitHub project](https://github.com/jgclark/NotePlan-tools) for issues, or suggest improvements.

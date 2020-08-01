@@ -1,12 +1,12 @@
 #!/usr/bin/ruby
 #-------------------------------------------------------------------------------
 # NotePlan Tools script
-# by Jonathan Clark, v1.4.0, 25.7.2020
+# by Jonathan Clark, v1.4.2, 1.8.2020
 #-------------------------------------------------------------------------------
 # See README.md file for details, how to run and configure it.
 # Repository: https://github.com/jgclark/NotePlan-tools/
 #-------------------------------------------------------------------------------
-VERSION = '1.4.0'.freeze
+VERSION = '1.4.2'.freeze
 
 require 'date'
 require 'time'
@@ -20,7 +20,8 @@ STORAGE_TYPE = 'CloudKit'.freeze # or Dropbox or iCloudDrive
 HOURS_TO_PROCESS = 24 # by default will process all files changed within this number of hours
 NUM_HEADER_LINES = 3 # suits my use, but probably wants to be 1 for most people
 TAGS_TO_REMOVE = ['#waiting', '#high'].freeze # simple array of strings
-DATE_TIME_FORMAT = '%e %b %Y %H:%M'.freeze # only used in logging
+DATE_TIME_LOG_FORMAT = '%e %b %Y %H:%M'.freeze # only used in logging
+DATE_OFFSET_FORMAT = '%e-%b-%Y'.freeze # format used to find date to use in offsets
 
 #-------------------------------------------------------------------------------
 # Other Constants
@@ -38,7 +39,7 @@ NP_CALENDAR_DIR = "#{NP_BASE_DIR}/Calendar".freeze
 
 # Other variables
 time_now = Time.now
-time_now_fmttd = time_now.strftime(DATE_TIME_FORMAT)
+time_now_fmttd = time_now.strftime(DATE_TIME_LOG_FORMAT)
 
 # Colours, using the colorization gem
 # to show some possible combinations, run  String.color_samples
@@ -460,6 +461,8 @@ class NPFile
         # clear previous settings when we get to a new heading
         currentTargetDate = ''
         lastWasTemplate = false
+        # TODO: You can configure the format of the date it's looking for with the @@@ variable
+        # Use DATE_OFFSET_FORMAT ??
         line.scan(%r{(\d{1,2}[\-\./]\d{1,2}[\-\./]\d{4})}) { |m| dateString = m.join }
         if dateString != ''
           # We have a date string to use for any offsets in the following section
