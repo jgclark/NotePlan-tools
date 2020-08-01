@@ -39,7 +39,9 @@ There are 2 ways of running the script:
 
 You can also specify options:
 - `-h` for help, 
-- `-n` to turn off moving mentions of [[Note]] in a calendar day file to the [[Note]]
+- `-a` (`--noarchive`) don't archive completed tasks into the ## Done section
+- `-n` (`--nomove`) to turn off moving mentions of [[Note]] in a calendar day file to the [[Note]]
+- `-s` (`--keepschedules`) keep the scheduled (>) dates of completed tasks
 - `-v` for verbose output 
 - `-w` for more verbose output
 
