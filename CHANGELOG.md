@@ -1,4 +1,6 @@
 # CHANGELOG
+## v1.4.3, 2.8.2020
+- [Fix] Error in calculation of yearly repeats
 
 ## v1.4.2, 1.8.2020
 - [Change] allow @done(date) to be tided up when time has AM/PM suffix (issue 17)

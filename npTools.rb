@@ -1,12 +1,12 @@
 #!/usr/bin/ruby
 #-------------------------------------------------------------------------------
 # NotePlan Tools script
-# by Jonathan Clark, v1.4.2, 1.8.2020
+# by Jonathan Clark, v1.4.3, 2.8.2020
 #-------------------------------------------------------------------------------
 # See README.md file for details, how to run and configure it.
 # Repository: https://github.com/jgclark/NotePlan-tools/
 #-------------------------------------------------------------------------------
-VERSION = '1.4.2'.freeze
+VERSION = '1.4.3'.freeze
 
 require 'date'
 require 'time'
@@ -441,6 +441,8 @@ class NPFile
       days_to_add = num * 30
     when 'q'
       days_to_add = num * 90
+    when 'y'
+      days_to_add = num * 365
     else
       puts "    Error in calc_offset_date from #{old_date} by #{interval}".colorize(WarningColour)
     end
