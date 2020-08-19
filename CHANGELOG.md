@@ -1,4 +1,7 @@
 # CHANGELOG
+## v1.4.4, 19.8.2020
+- [New] Allow for future NP change to allow .md files not just .txt files (issue 20)
+
 ## v1.4.3, 2.8.2020
 - [Fix] Error in calculation of yearly repeats
 

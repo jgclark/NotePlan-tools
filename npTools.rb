@@ -1,12 +1,12 @@
 #!/usr/bin/ruby
 #-------------------------------------------------------------------------------
 # NotePlan Tools script
-# by Jonathan Clark, v1.4.3, 2.8.2020
+# by Jonathan Clark, v1.4.4, 19.8.2020
 #-------------------------------------------------------------------------------
 # See README.md file for details, how to run and configure it.
 # Repository: https://github.com/jgclark/NotePlan-tools/
 #-------------------------------------------------------------------------------
-VERSION = '1.4.3'.freeze
+VERSION = '1.4.4'.freeze
 
 require 'date'
 require 'time'
@@ -137,7 +137,7 @@ class NPFile
     n = cleaned = 0
     while n < @lineCount
       # remove any >YYYY-MM-DD on completed or cancelled tasks
-      if ($remove_scheduled == 1)
+      if $remove_scheduled == 1
         if (@lines[n] =~ /\s>\d{4}\-\d{2}\-\d{2}/) && (@lines[n] =~ /\[(x|-)\]/)
           @lines[n].gsub!(/\s>\d{4}\-\d{2}\-\d{2}/, '')
           cleaned += 1
@@ -233,7 +233,7 @@ class NPFile
             line_to_check = @lines[n]
             # What's the indent of this line?
             line_to_check_indent = ''
-            line_to_check.scan(/^(\s*)\S/) { |m| line_to_check_indent = m.join }
+            line_to_check.scan(/^(\s*)\S/) { |m| line_to_check_indent = m.join } # FIXME: issue #19, can be nil
             puts "    - for '#{line_to_check.chomp}' indent='#{line_to_check_indent}' (#{line_to_check_indent.length})" if $verbose > 1
             break if line_indent.length >= line_to_check_indent.length
 
@@ -641,7 +641,7 @@ opt_parser = OptionParser.new do |opts|
   opts.on('-n', '--nomove', "Don't move Daily items with [[Note]] to the Note") do
     options[:move] = 0
   end
-  opts.on('-s', '--keepschedules', "Keep the scheduled (>) dates of completed tasks") do
+  opts.on('-s', '--keepschedules', 'Keep the scheduled (>) dates of completed tasks') do
     options[:remove_scheduled] = 0
   end
   opts.on('-v', '--verbose', 'Show information as I work') do
@@ -660,7 +660,7 @@ $remove_scheduled = options[:remove_scheduled]
 i = 0
 begin
   Dir.chdir(NP_NOTES_DIR)
-  Dir.glob('**/*.txt').each do |this_file|
+  Dir.glob(['**/*.txt', '**/*.md']).each do |this_file|
     next unless this_file =~ /^[^@]/ # as can't get file glob including [^@] to work
 
     $allNotes[i] = NPFile.new(this_file, i)
@@ -716,7 +716,7 @@ else
   puts "Starting npTools at #{time_now_fmttd} for all NP files altered in last #{HOURS_TO_PROCESS} hours."
   begin
     Dir.chdir(NP_NOTES_DIR)
-    Dir.glob('**/*.txt').each do |this_file|
+    Dir.glob(['**/*.txt', '**/*.md']).each do |this_file|
       next unless this_file =~ /^[^@]/ # as can't get file glob including [^@] to work
 
       # if modified time (mtime) in the last 24 hours
@@ -739,7 +739,7 @@ else
   # and find those altered in the last 24hrs
   begin
     Dir.chdir(NP_CALENDAR_DIR)
-    Dir.glob('*.txt').each do |this_file|
+    Dir.glob(['**/*.txt', '**/*.md']).each do |this_file|
       # if modified time (mtime) in the last
       mtime = File.mtime(this_file)
       next unless mtime > (time_now - HOURS_TO_PROCESS * 60 * 60)
