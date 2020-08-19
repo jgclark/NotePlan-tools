@@ -1,12 +1,12 @@
 #!/usr/bin/ruby
 #-------------------------------------------------------------------------------
 # NotePlan Tools script
-# by Jonathan Clark, v1.4.4, 19.8.2020
+# by Jonathan Clark, v1.4.5, 19.8.2020
 #-------------------------------------------------------------------------------
 # See README.md file for details, how to run and configure it.
 # Repository: https://github.com/jgclark/NotePlan-tools/
 #-------------------------------------------------------------------------------
-VERSION = '1.4.4'.freeze
+VERSION = '1.4.5'.freeze
 
 require 'date'
 require 'time'
@@ -21,7 +21,7 @@ HOURS_TO_PROCESS = 24 # by default will process all files changed within this nu
 NUM_HEADER_LINES = 3 # suits my use, but probably wants to be 1 for most people
 TAGS_TO_REMOVE = ['#waiting', '#high'].freeze # simple array of strings
 DATE_TIME_LOG_FORMAT = '%e %b %Y %H:%M'.freeze # only used in logging
-DATE_OFFSET_FORMAT = '%e-%b-%Y'.freeze # format used to find date to use in offsets
+DATE_OFFSET_FORMAT = '%e-%b-%Y'.freeze # TODO: format used to find date to use in offsets
 
 #-------------------------------------------------------------------------------
 # Other Constants
@@ -77,7 +77,7 @@ class NPFile
     @id = id
     @title = nil
     @lines = []
-    @lineCount = 0
+    @line_count = 0
     @cancelled_header = 0
     @done_header = 0
     @is_calendar = false
@@ -98,7 +98,7 @@ class NPFile
       n += 1
     end
     f.close
-    @lineCount = @lines.size
+    @line_count = @lines.size
 
     # Now make a title for this file:
     if @filename =~ /\d{8}\.txt/
@@ -117,7 +117,7 @@ class NPFile
     # Clean up lines with just * or - in them
     puts '  remove_empty_tasks ...' if $verbose > 1
     n = cleaned = 0
-    while n < @lineCount
+    while n < @line_count
       # blank any lines which just have a * or -
       if @lines[n] =~ /^\s*[\*\-]\s*$/
         @lines[n] = ''
@@ -128,6 +128,7 @@ class NPFile
     return unless cleaned.positive?
 
     @is_updated = true
+    @line_count = @lines.size
     puts "  - removed #{cleaned} emtpy lines" if $verbose > 0
   end
 
@@ -135,7 +136,7 @@ class NPFile
     # remove unneeded tags or >dates from complete or cancelled tasks
     puts '  remove_tags_dates ...' if $verbose > 1
     n = cleaned = 0
-    while n < @lineCount
+    while n < @line_count
       # remove any >YYYY-MM-DD on completed or cancelled tasks
       if $remove_scheduled == 1
         if (@lines[n] =~ /\s>\d{4}\-\d{2}\-\d{2}/) && (@lines[n] =~ /\[(x|-)\]/)
@@ -162,13 +163,13 @@ class NPFile
   def insert_new_line(new_line, line_number)
     # Insert 'line' into position 'line_number'
     puts '  insert_new_line ...' if $verbose > 1
-    n = @lineCount # start iterating from the end of the array
+    n = @line_count # start iterating from the end of the array
     while n >= line_number
       @lines[n + 1] = @lines[n]
       n -= 1
     end
     @lines[line_number] = new_line
-    @lineCount += 1
+    @line_count += 1
   end
 
   def move_calendar_to_notes
@@ -177,7 +178,7 @@ class NPFile
     noteName = noteToAddTo = nil
     n = 0
     moved = 0
-    while n < @lineCount
+    while n < @line_count
       line = @lines[n]
       is_header = false
       # find todo or header lines with [[note title]] mentions
@@ -191,8 +192,8 @@ class NPFile
       # NB the '+?' gets minimum number of chars, to avoid grabbing contents of several [[notes]] in the same line
       # line.scan(/^\s*\*.*\[\[(.+?)\]\]/) { |m| noteName = m.join }  # why so specific?
       line.scan(/\[\[(.+?)\]\]/) { |m| noteName = m.join }
-      puts "  - found note link [[#{noteName}]] in header on line #{n + 1} of #{@lineCount}" if is_header && ($verbose > 0)
-      puts "  - found note link [[#{noteName}]] in task on line #{n + 1} of #{@lineCount}" if !is_header && ($verbose > 0)
+      puts "  - found note link [[#{noteName}]] in header on line #{n + 1} of #{@line_count}" if is_header && ($verbose > 0)
+      puts "  - found note link [[#{noteName}]] in task on line #{n + 1} of #{@line_count}" if !is_header && ($verbose > 0)
 
       # find the note file to add to
       $allNotes.each do |nn|
@@ -208,7 +209,7 @@ class NPFile
         line = "#{line[0..label_start]}#{line[label_end..-2]}" # also chomp off last character (newline)
 
         if !is_header
-          # A todo line ...
+          # This is a todo line ...
           # If no due date is specified in rest of the todo, add date from the title of the calendar file it came from
           if line !~ />\d{4}\-\d{2}\-\d{2}/
             cal_date = "#{@title[0..3]}-#{@title[4..5]}-#{@title[6..7]}"
@@ -221,50 +222,50 @@ class NPFile
           # Work out indent level of current line
           line_indent = ''
           line.scan(/^(\s*)\*/) { |m| line_indent = m.join }
-          puts "  - starting task analysis at line #{n + 1} with indent '#{line_indent}' (#{line_indent.length})" if $verbose > 1
+          puts "  - starting task analysis at line #{n + 1} of #{@line_count} with indent '#{line_indent}' (#{line_indent.length})" if $verbose > 1
           # Remove this line from the calendar note
           @lines.delete_at(n)
-          @lineCount -= 1
+          @line_count -= 1
           moved += 1
 
           # We also want to take any following indented lines
           # So incrementally add lines until we find ones at the same or lower level of indent
-          while n < @lineCount
+          while n < @line_count
             line_to_check = @lines[n]
             # What's the indent of this line?
             line_to_check_indent = ''
-            line_to_check.scan(/^(\s*)\S/) { |m| line_to_check_indent = m.join } # FIXME: issue #19, can be nil
+            line_to_check.scan(/^(\s*)\S/) { |m| line_to_check_indent = m.join }
             puts "    - for '#{line_to_check.chomp}' indent='#{line_to_check_indent}' (#{line_to_check_indent.length})" if $verbose > 1
             break if line_indent.length >= line_to_check_indent.length
 
             lines_to_output += line_to_check
             # Remove this line from the calendar note
             @lines.delete_at(n)
-            @lineCount -= 1
+            @line_count -= 1
             moved += 1
           end
         else
-          # A header line ...
+          # This is a header line ...
           # We want to take any following lines up to the next blank line or same-level header.
           # So incrementally add lines until we find that break.
           header_marker = ''
           line.scan(/^(#+)\s/) { |m| header_marker = m.join }
           lines_to_output = line + "\n"
           @lines.delete_at(n)
-          @lineCount -= 1
+          @line_count -= 1
           moved += 1
           puts "  - starting header analysis at line #{n + 1}" if $verbose > 1
           # n += 1
-          while n < @lineCount
+          while n < @line_count
             line_to_check = @lines[n]
             puts "    - l_t_o checking '#{line_to_check}'"
             break if (line_to_check =~ /^$/) || (line_to_check =~ /^#{header_marker}\s/)
 
             lines_to_output += line_to_check
             # Remove this line from the calendar note
-            puts "    - @lineCount now #{@lineCount}"
+            puts "    - @line_count now #{@line_count}"
             @lines.delete_at(n)
-            @lineCount -= 1
+            @line_count -= 1
             moved += 1
           end
         end
@@ -298,7 +299,7 @@ class NPFile
     # Go through all lines between metadata and ## Done section
     # start, noting completed tasks
     n = 1
-    searchLineLimit = @done_header.positive? ? @done_header : @lineCount
+    searchLineLimit = @done_header.positive? ? @done_header : @line_count
     while n < searchLineLimit
       n += 1
       line = @lines[n]
@@ -308,7 +309,7 @@ class NPFile
       doneToMove.push(n)
       # and look ahead to see how many lines to move -- all until blank or starting # or *
       linesToMove = 0
-      while n < @lineCount
+      while n < @line_count
         break if (@lines[n + 1] =~ /^(#+\s+|\*\s+)/) || (@lines[n + 1] =~ /^$/)
 
         linesToMove += 1
@@ -325,19 +326,19 @@ class NPFile
       if @done_header.zero?
         @lines.push('')
         @lines.push('## Done')
-        @lineCount += 2
-        @done_header = @lineCount
+        @line_count += 2
+        @done_header = @line_count
       end
 
       # Copy the relevant lines
-      doneInsertionLine = @cancelled_header != 0 ? @cancelled_header : @lineCount
+      doneInsertionLine = @cancelled_header != 0 ? @cancelled_header : @line_count
       c = 0
       doneToMove.each do |nn|
         linesToMove = doneToMoveLength[c]
         puts "      Copying lines #{nn}-#{nn + linesToMove} to insert at #{doneInsertionLine}" if $verbose > 1
         (nn..(nn + linesToMove)).each do |i|
           @lines.insert(doneInsertionLine, @lines[i])
-          @lineCount += 1
+          @line_count += 1
           doneInsertionLine += 1
         end
         c += 1
@@ -350,7 +351,7 @@ class NPFile
         puts "      Deleting lines #{nn}-#{nn + linesToMove}" if $verbose > 1
         (nn + linesToMove).downto(n) do |i|
           @lines.delete_at(i)
-          @lineCount -= 1
+          @line_count -= 1
           doneInsertionLine -= 1
           @done_header -= 1
         end
@@ -361,7 +362,7 @@ class NPFile
     # Go through all lines between metadata and ## Done section
     # start, noting cancelled line numbers
     n = 0
-    searchLineLimit = @done_header.positive? ? @done_header : @lineCount
+    searchLineLimit = @done_header.positive? ? @done_header : @line_count
     while n < searchLineLimit
       n += 1
       line = @lines[n]
@@ -371,7 +372,7 @@ class NPFile
       cancToMove.push(n)
       # and look ahead to see how many lines to move -- all until blank or starting # or *
       linesToMove = 0
-      while n < @lineCount
+      while n < @line_count
         linesToMove += 1
         break if (@lines[n + 1] =~ /^(#+\s+|\*\s+)/) || (@lines[n + 1] =~ /^$/)
 
@@ -389,19 +390,19 @@ class NPFile
     if @cancHeader.zero?
       @lines.push('')
       @lines.push('## Cancelled')
-      @lineCount += 2
-      @cancHeader = @lineCount
+      @line_count += 2
+      @cancHeader = @line_count
     end
 
     # Copy the relevant lines
-    cancelledInsertionLine = @lineCount
+    cancelledInsertionLine = @line_count
     c = 0
     cancToMove.each do |nn|
       linesToMove = cancToMoveLength[c]
       puts "      Copying lines #{nn}-#{nn + linesToMove} to insert at #{cancelledInsertionLine}" if $verbose > 1
       (nn..(nn + linesToMove)).each do |i|
         @lines.insert(cancelledInsertionLine, @lines[i])
-        @lineCount += 1
+        @line_count += 1
         cancelledInsertionLine += 1
       end
       c += 1
@@ -415,7 +416,7 @@ class NPFile
       (nn + linesToMove).downto(n) do |i|
         puts "        Deleting line #{i} ..." if $verbose > 1
         @lines.delete_at(i)
-        @lineCount -= 1
+        @line_count -= 1
         @done_header -= 1
       end
     end
@@ -467,8 +468,7 @@ class NPFile
         # clear previous settings when we get to a new heading
         currentTargetDate = ''
         lastWasTemplate = false
-        # TODO: You can configure the format of the date it's looking for with the @@@ variable
-        # Use DATE_OFFSET_FORMAT ??
+        # TODO: Allow configuration of the format of the date it's looking for with the DATE_OFFSET_FORMAT variable
         line.scan(%r{(\d{1,2}[\-\./]\d{1,2}[\-\./]\d{4})}) { |m| dateString = m.join }
         if dateString != ''
           # We have a date string to use for any offsets in the following section
@@ -489,7 +489,7 @@ class NPFile
         line.scan(/\{([\+\-]?\d+[dwm])\}/) { |m| dateOffsetString = m.join }
         if dateOffsetString != ''
           puts "    UTD: Found DOS #{dateOffsetString} in '#{line.chomp}'" if $verbose > 1
-          if (currentTargetDate != '') && !lastWasTemplate
+          if currentTargetDate != '' && !lastWasTemplate
             calcDate = calc_offset_date(Date.parse(currentTargetDate), dateOffsetString)
             # Remove the offset text (e.g. {-3d}) by finding string points
             label_start = line.index('{') - 1
@@ -499,8 +499,8 @@ class NPFile
             line += " >#{calcDate}"
             @lines[n] = line
             puts "    Used #{dateOffsetString} line to make '#{line.chomp}'" if $verbose > 1
-            # Now write out calcDate
             @is_updated = true
+            @line_count += 1
           elsif $verbose > 0
             puts "    Warning: in use_template_dates no currentTargetDate before line '#{line.chomp}'".colorize(WarningColour)
           end
@@ -586,7 +586,7 @@ class NPFile
     # go backwards through the note, deleting any blanks at the end
     puts '  remove_empty_trailing_lines ...' if $verbose > 1
     cleaned = 0
-    n = @lineCount - 1
+    n = @line_count - 1
     while n.positive?
       line_to_test = @lines[n]
       break unless line_to_test =~ /^$/
@@ -598,6 +598,7 @@ class NPFile
     return unless cleaned.positive?
 
     @is_updated = true
+    @line_count = @lines.size
     puts "  - removed #{cleaned} empty lines" if $verbose > 1
   end
 

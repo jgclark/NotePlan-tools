@@ -1,9 +1,12 @@
 # CHANGELOG
+## v1.4.5, 19.8.2020
+- [Fix] nil error in moving tasks to [[Note]] (issue 19)
+
 ## v1.4.4, 19.8.2020
 - [New] Allow for future NP change to allow .md files not just .txt files (issue 20)
 
 ## v1.4.3, 2.8.2020
-- [Fix] Error in calculation of yearly repeats
+- [Fix] Error in calculation of yearly repeats (issue 18)
 
 ## v1.4.2, 1.8.2020
 - [Change] allow @done(date) to be tided up when time has AM/PM suffix (issue 17)
@@ -20,7 +23,7 @@
 - [New] Make work with CloudKit storage, available for NP v3 beta (issue 11), 
 
 ## v1.2.8, 13.2020
-- [New] @@@ (issue 8)
+- [Fix] infinite loop on missing note (issue 8)
 
 ## v1.2.6, 8.6.2020
 - [New] remove empty trailing lines (issue 10)
