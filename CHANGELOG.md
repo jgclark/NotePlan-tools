@@ -1,4 +1,8 @@
 # CHANGELOG
+
+## v1.4.6, 19.8.2020
+- [Improve] Ignore empty NotePlan data files (issue 12), and simplify file-glob coding to ignore @Archive and @Trash sub-directories
+
 ## v1.4.5, 19.8.2020
 - [Fix] nil error in moving tasks to [[Note]] (issue 19)
 

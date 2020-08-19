@@ -1,12 +1,12 @@
 #!/usr/bin/ruby
 #-------------------------------------------------------------------------------
 # NotePlan Tools script
-# by Jonathan Clark, v1.4.5, 19.8.2020
+# by Jonathan Clark, v1.4.6, 19.8.2020
 #-------------------------------------------------------------------------------
 # See README.md file for details, how to run and configure it.
 # Repository: https://github.com/jgclark/NotePlan-tools/
 #-------------------------------------------------------------------------------
-VERSION = '1.4.5'.freeze
+VERSION = '1.4.6'.freeze
 
 require 'date'
 require 'time'
@@ -661,8 +661,8 @@ $remove_scheduled = options[:remove_scheduled]
 i = 0
 begin
   Dir.chdir(NP_NOTES_DIR)
-  Dir.glob(['**/*.txt', '**/*.md']).each do |this_file|
-    next unless this_file =~ /^[^@]/ # as can't get file glob including [^@] to work
+  Dir.glob(['{[!@]**/*,*}.txt', '{[!@]**/*,*}.md']).each do |this_file|
+    next if File.zero?(this_file) # ignore if this file is empty
 
     $allNotes[i] = NPFile.new(this_file, i)
     i += 1
@@ -679,8 +679,9 @@ if ARGV.count.positive?
   begin
     Dir.chdir(NP_NOTES_DIR)
     ARGV.each do |pattern|
-      Dir.glob('**/' + pattern).each do |this_file|
-        next unless this_file =~ /^[^@]/ # as can't get file glob including [^@] to work
+      Dir.glob('{[!@]**/' + pattern).each do |this_file|
+        # Dir.glob('**/' + pattern).each do |this_file|
+        #   next unless this_file =~ /^[^@]/ # as can't get file glob including [^@] to work
 
         # Note has already been read in; so now just find which one to point to
         $allNotes.each do |an|
@@ -701,6 +702,8 @@ if ARGV.count.positive?
       Dir.chdir(NP_CALENDAR_DIR)
       ARGV.each do |pattern|
         Dir.glob(pattern).each do |this_file|
+          next if File.zero?(this_file) # ignore if this file is empty
+
           $notes[n] = NPFile.new(this_file, n)
           n += 1
         end
@@ -717,11 +720,10 @@ else
   puts "Starting npTools at #{time_now_fmttd} for all NP files altered in last #{HOURS_TO_PROCESS} hours."
   begin
     Dir.chdir(NP_NOTES_DIR)
-    Dir.glob(['**/*.txt', '**/*.md']).each do |this_file|
-      next unless this_file =~ /^[^@]/ # as can't get file glob including [^@] to work
-
+    Dir.glob(['{[!@]**/*,*}.txt', '{[!@]**/*,*}.md']).each do |this_file|
       # if modified time (mtime) in the last 24 hours
       mtime = File.mtime(this_file)
+      next if File.zero?(this_file) # ignore if this file is empty
       next unless mtime > (time_now - HOURS_TO_PROCESS * 60 * 60)
 
       # Note has already been read in; so now just find which one to point to
@@ -740,9 +742,10 @@ else
   # and find those altered in the last 24hrs
   begin
     Dir.chdir(NP_CALENDAR_DIR)
-    Dir.glob(['**/*.txt', '**/*.md']).each do |this_file|
+    Dir.glob(['{[!@]**/*,*}.txt', '{[!@]**/*,*}.md']).each do |this_file|
       # if modified time (mtime) in the last
       mtime = File.mtime(this_file)
+      next if File.zero?(this_file) # ignore if this file is empty
       next unless mtime > (time_now - HOURS_TO_PROCESS * 60 * 60)
 
       # read the calendar file in
