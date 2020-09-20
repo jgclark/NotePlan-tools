@@ -672,7 +672,7 @@ if ARGV.count.positive?
         # ... otherwise treat as close to a regex term as possible with Dir.glob
         glob_pattern = '[!@]**/*' + pattern + '*.{md,txt}'
       end
-      puts " For glob_pattern #{glob_pattern} found note filenames:" if $verbose
+      puts " For glob_pattern #{glob_pattern} found note filenames:" if $verbose > 1
       Dir.chdir(NP_NOTES_DIR)
       Dir.glob(glob_pattern).each do |this_file|
         puts "  #{this_file}" if $verbose
