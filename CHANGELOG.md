@@ -1,5 +1,8 @@
 # CHANGELOG
 
+## v1.4.7, 20.9.2020
+- [Fix] Improve finding files with .md as well as .txt extensions, as well as more smartly handling supplied filename patterns
+
 ## v1.4.6, 19.8.2020
 - [Improve] Ignore empty NotePlan data files (issue 12), and simplify file-glob coding to ignore @Archive and @Trash sub-directories
 

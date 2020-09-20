@@ -35,7 +35,7 @@ Changes any mentions of **date offset patterns** (e.g. `{-10d}`, `{+2w}`, `{-3m}
 ## Running the Tools
 There are 2 ways of running the script:
 1. with no arguments (`ruby npTools.rb`), it checks all files updated in the last 24 hours. This is the way to use it automatically, running one or more times each day. (This is configurable by HOURS_TO_PROCESS below.)
-2. with passed filename pattern(s), where it works on any matching Calendar or Note files. For example, to match the Daily file from 24/3/2020 give `ruby npTools.rb 20200324.txt`. It can include wildcard *patterns* to match multiple files, for example `202003*.txt` to process all Daily files from March 2020.
+2. with passed filename pattern(s), where it works on any matching Calendar or Note files. For example, to match the Daily file from 24/3/2020 give `ruby npTools.rb 20200324.txt`. It can include wildcard *patterns* to match multiple files, for example `202003*.txt` to process all Daily files from March 2020. If no `.` is found in the pattern, the pattern matches all files as `*pattern*.*`.
 
 You can also specify options:
 - `-h` for help, 
