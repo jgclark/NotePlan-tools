@@ -1,12 +1,12 @@
 #!/usr/bin/ruby
 #-------------------------------------------------------------------------------
 # NotePlan Tools script
-# by Jonathan Clark, v1.4.7, 20.9.2020
+# by Jonathan Clark, v1.4.8, 23.9.2020
 #-------------------------------------------------------------------------------
 # See README.md file for details, how to run and configure it.
 # Repository: https://github.com/jgclark/NotePlan-tools/
 #-------------------------------------------------------------------------------
-VERSION = '1.4.7'.freeze
+VERSION = '1.4.8'.freeze
 
 require 'date'
 require 'time'
@@ -70,10 +70,12 @@ class NPFile
   attr_reader :is_calendar
   attr_reader :is_updated
   attr_reader :filename
+  attr_reader :modified_time
 
   def initialize(this_file, id)
     # initialise instance variables (that persist with the class instance)
     @filename = this_file
+    @modified_time = File.mtime(this_file)
     @id = id
     @title = nil
     @lines = []
@@ -172,9 +174,13 @@ class NPFile
     @line_count += 1
   end
 
-  def move_calendar_to_notes
+  def move_daily_ref_to_notes
     # Move tasks with a [[note link]] to that note (inserting after header)
-    puts '  move_calendar_to_notes ...' if $verbose > 1
+    # In NP v2.4 and 3.0 there's a slight issue that there can be duplicate 
+    # note titles over different sub-folders. This will likely be improved in
+    # the future, but for now I'll try to select the most recently-changed if
+    # there are matching names.
+    puts '  move_daily_ref_to_notes ...' if $verbose > 1
     noteName = noteToAddTo = nil
     n = 0
     moved = 0
@@ -190,14 +196,20 @@ class NPFile
 
       # the following regex matches returns an array with one item, so make a string (by join)
       # NB the '+?' gets minimum number of chars, to avoid grabbing contents of several [[notes]] in the same line
-      # line.scan(/^\s*\*.*\[\[(.+?)\]\]/) { |m| noteName = m.join }  # why so specific?
       line.scan(/\[\[(.+?)\]\]/) { |m| noteName = m.join }
       puts "  - found note link [[#{noteName}]] in header on line #{n + 1} of #{@line_count}" if is_header && ($verbose > 0)
       puts "  - found note link [[#{noteName}]] in task on line #{n + 1} of #{@line_count}" if !is_header && ($verbose > 0)
 
       # find the note file to add to
+      # expect there to be several with same title: if so then use the one with
+      # the most recent modified_time
+      mtime = Time.new(1970,1,1) # i.e. the earlist possible time
       $allNotes.each do |nn|
-        noteToAddTo = nn.id if nn.title == noteName
+        if nn.title == noteName
+          puts "  - found matching title with modified_time #{nn.modified_time}" if $verbose > 1
+          noteToAddTo = nn.id if nn.modified_time > mtime
+          mtime = nn.modified_time
+        end
       end
 
       if noteToAddTo # if note is found
@@ -431,7 +443,7 @@ class NPFile
     # - interval is string of form nn[dwmq]
     # puts "    c_o_d: old #{old_date} interval #{interval} ..."
     days_to_add = 0
-    unit = interval[-1]
+    unit = interval[-1] # i.e. get last characters
     num = interval.chop.to_i
     case unit
     when 'd'
@@ -659,9 +671,24 @@ $remove_scheduled = options[:remove_scheduled]
 
 n = 0 # number of notes and daily entries to work on
 
+# Start by reading all Notes files in
+# (This is needed to have a list of all note titles.)
+begin
+  i = 0
+  Dir.chdir(NP_NOTES_DIR)
+  Dir.glob(['{[!@]**/*,*}.txt', '{[!@]**/*,*}.md']).each do |this_file|
+    next if File.zero?(this_file) # ignore if this file is empty
+
+    $allNotes[i] = NPFile.new(this_file, i)
+    i += 1
+  end
+rescue StandardError => e
+  puts "ERROR: #{e.exception.message} when reading in all notes files".colorize(WarningColour)
+end
+puts "Read in all #{i} notes files" if $verbose > 0
+
 if ARGV.count.positive?
   # We have a file pattern given, so find that (starting in the notes directory), and use it
-  
   puts "Starting npTools at #{time_now_fmttd} for files matching pattern(s) #{ARGV}."
   begin
     ARGV.each do |pattern|
@@ -673,16 +700,20 @@ if ARGV.count.positive?
         glob_pattern = '[!@]**/*' + pattern + '*.{md,txt}'
       end
       puts " For glob_pattern #{glob_pattern} found note filenames:" if $verbose > 1
-      Dir.chdir(NP_NOTES_DIR)
       Dir.glob(glob_pattern).each do |this_file|
         puts "  #{this_file}" if $verbose
-        next if File.zero?(this_file) # ignore if this file is empty
-
-        $notes[n] = NPFile.new(this_file, n)
-        n += 1
+        # Note has already been read in; so now just find which one to point to
+        $allNotes.each do |an|
+          if an.filename == this_file
+            $notes[n] = an
+            n += 1
+          end
+        end
       end
 
+      # Now look for matches in Daily/Calendar files
       Dir.chdir(NP_CALENDAR_DIR)
+      glob_pattern = '*' + pattern + '*.{md,txt}'
       Dir.glob(glob_pattern).each do |this_file|
         puts "  #{this_file}" if $verbose
         next if File.zero?(this_file) # ignore if this file is empty
@@ -700,15 +731,16 @@ else
   mtime = 0
   puts "Starting npTools at #{time_now_fmttd} for all NP files altered in last #{HOURS_TO_PROCESS} hours."
   begin
-    Dir.chdir(NP_NOTES_DIR)
-    Dir.glob(['{[!@]**/*,*}.{txt,md}']).each do |this_file|
-      # if modified time (mtime) in the last 24 hours
-      mtime = File.mtime(this_file)
-      next if File.zero?(this_file) # ignore if this file is empty
-      next unless mtime > (time_now - HOURS_TO_PROCESS * 60 * 60)
+    # Dir.chdir(NP_NOTES_DIR)
+    # Dir.glob(['{[!@]**/*,*}.{txt,md}']).each do |this_file|
+    #   # if modified time (mtime) in the last 24 hours
+    #   mtime = File.mtime(this_file)
+    #   next if File.zero?(this_file) # ignore if this file is empty
+    $allNotes.each do |this_note|
+      next unless this_note.modified_time > (time_now - HOURS_TO_PROCESS * 60 * 60)
 
-      # Read the note file in
-      $notes[n] = NPFile.new(this_file, n)
+      # Note has already been read in; so now just find which one to point to
+      $notes[n] = this_note
       n += 1
     end
   rescue StandardError => e
@@ -743,7 +775,7 @@ if n.positive? # if we have some notes to work on ...
     note.remove_empty_trailing_lines
     note.remove_tags_dates
     note.process_repeats
-    note.move_calendar_to_notes if note.is_calendar && options[:move] == 1
+    note.move_daily_ref_to_notes if note.is_calendar && options[:move] == 1
     note.use_template_dates unless note.is_calendar
     note.archive_lines if $archive == 1
     # If there have been changes, write out the file

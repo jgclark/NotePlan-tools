@@ -1,5 +1,8 @@
 # CHANGELOG
 
+## v1.4.8, 23.9.2020
+- [Improve] Handling of edge case where there are two identically-named notes in different sub-folders. When moving a task to them, pick the most recently note to move it to. (issue 21)
+
 ## v1.4.7, 20.9.2020
 - [Fix] Improve finding files with .md as well as .txt extensions, as well as more smartly handling supplied filename patterns
 
