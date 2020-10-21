@@ -18,7 +18,7 @@ Changes any mentions of **date offset patterns** (e.g. `{-10d}`, `{+2w}`, `{-3m}
 - Valid intervals are specified as `[+][0-9][dwmqy]`. This allows for `d`ays, `w`eeks, `m`onths, `q`uarters or `y`ears.
 - There's also the special case `{0d}` meaning on the day itself
 - It also ignores offsets in a section with a heading that includes a #template hashtag.
-- TODO: You can configure the format of the date it's looking for with the @@@ variable (see below).
+- You can configure the format of the date it's looking for with the DATE_OFFSET_FORMAT variable (see below).
 
 | This example ...                                                                                                                                                                        | ... becomes                                                                                                                                                                                                 |
 | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -58,6 +58,8 @@ It works with all 3 storage options for storing NotePlan data: CloudKit (the def
 - `HOURS_TO_PROCESS`: will process all files changed within this number of hours (default 24)
 - `NUM_HEADER_LINES`: number of lines at the start of a note file to regard as the header. The default is 1. Relevant when moving lines around.
 - `TAGS_TO_REMOVE`: list of tags to remove. Default ["#waiting","#high"]
+- `DATE_TIME_LOG_FORMAT`: date string format to use in logs
+<!-- - `DATE_OFFSET_FORMAT`: date string format to use in date offset patterns -->
 
 ### Automatic running
 If you wish to run this automatically in the background on macOS, you can do this using the built-in `launchctl` system. Here's the configuration file `jgc.npTools.plist` that I use to automatically run `npTools.rb` several times a day:

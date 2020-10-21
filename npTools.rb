@@ -638,7 +638,7 @@ end
 # Setup program options
 options = {}
 opt_parser = OptionParser.new do |opts|
-  opts.banner = "NotePlan tools v#{VERSION}. Details at https://github.com/jgclark/NotePlan-tools/\nUsage: npTools.rb [options] [file-pattern]"
+  opts.banner = "NotePlan tools v#{VERSION}\nDetails at https://github.com/jgclark/NotePlan-tools/\nUsage: npTools.rb [options] [file-pattern]"
   opts.separator ''
   options[:move] = 1
   options[:archive] = 0 # default off at the moment as feature isn't complete
