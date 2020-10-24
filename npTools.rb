@@ -1,12 +1,12 @@
 #!/usr/bin/ruby
 #-------------------------------------------------------------------------------
 # NotePlan Tools script
-# by Jonathan Clark, v1.4.8, 23.9.2020
+# by Jonathan Clark, v1.4.9, 17.10.2020
 #-------------------------------------------------------------------------------
 # See README.md file for details, how to run and configure it.
 # Repository: https://github.com/jgclark/NotePlan-tools/
 #-------------------------------------------------------------------------------
-VERSION = '1.4.8'.freeze
+VERSION = '1.4.9'.freeze
 
 require 'date'
 require 'time'
@@ -270,12 +270,12 @@ class NPFile
           # n += 1
           while n < @line_count
             line_to_check = @lines[n]
-            puts "    - l_t_o checking '#{line_to_check}'"
+            puts "    - l_t_o checking '#{line_to_check}'" if $verbose > 1
             break if (line_to_check =~ /^$/) || (line_to_check =~ /^#{header_marker}\s/)
 
             lines_to_output += line_to_check
             # Remove this line from the calendar note
-            puts "    - @line_count now #{@line_count}"
+            puts "    - @line_count now #{@line_count}" if $verbose > 1
             @lines.delete_at(n)
             @line_count -= 1
             moved += 1
@@ -554,7 +554,6 @@ class NPFile
           # get repeat to apply
           date_interval_string = ''
           updated_line.scan(/@repeat\((.*?)\)/) { |mm| date_interval_string = mm.join }
-          # puts "    In line <#{updated_line.chomp}> (date #{completed_date}) found repeat interval <#{date_interval_string}>"
           if date_interval_string[0] == '+'
             # New repeat date = completed date + interval
             date_interval_string = date_interval_string[1..date_interval_string.length]
@@ -583,7 +582,6 @@ class NPFile
           # Replace the * [x] text with * [>]
           updated_line_without_done = updated_line_without_done.gsub(/\[x\]/, '[>]')
           outline = "#{updated_line_without_done} >#{new_repeat_date}"
-          # puts "      --> #{outline}" if $verbose > 1
 
           # Insert this new line after current line
           n += 1
@@ -616,7 +614,7 @@ class NPFile
 
   def rewrite_file
     # write out this update file
-    puts '  > writing updated version of ' + @filename.to_s.bold
+    puts '  > writing updated version of ' + @filename.to_s.bold unless $quiet
     # open file and write all the lines out
     filepath = if @is_calendar
                  "#{NP_CALENDAR_DIR}/#{@filename}"
@@ -643,6 +641,7 @@ opt_parser = OptionParser.new do |opts|
   options[:move] = 1
   options[:archive] = 0 # default off at the moment as feature isn't complete
   options[:remove_scheduled] = 1
+  options[:quiet] = false
   options[:verbose] = 0
   opts.on('-a', '--noarchive', "Don't archive completed tasks into the ## Done section") do
     options[:archive] = 0
@@ -653,6 +652,9 @@ opt_parser = OptionParser.new do |opts|
   end
   opts.on('-n', '--nomove', "Don't move Daily items with [[Note]] to the Note") do
     options[:move] = 0
+  end
+  opts.on('-q', '--quiet', 'Suppress all output, apart from error messages. Overrides -v or -w.') do
+    options[:quiet] = true
   end
   opts.on('-s', '--keepschedules', 'Keep the scheduled (>) dates of completed tasks') do
     options[:remove_scheduled] = 0
@@ -665,7 +667,8 @@ opt_parser = OptionParser.new do |opts|
   end
 end
 opt_parser.parse! # parse out options, leaving file patterns to process
-$verbose = options[:verbose]
+$quiet = options[:quiet]
+$verbose = $quiet ? 0 : options[:verbose] # if quiet, then verbose has to  be 0
 $archive = options[:archive]
 $remove_scheduled = options[:remove_scheduled]
 
@@ -689,7 +692,7 @@ puts "Read in all #{i} notes files" if $verbose > 0
 
 if ARGV.count.positive?
   # We have a file pattern given, so find that (starting in the notes directory), and use it
-  puts "Starting npTools at #{time_now_fmttd} for files matching pattern(s) #{ARGV}."
+  puts "Starting npTools at #{time_now_fmttd} for files matching pattern(s) #{ARGV}." unless $quiet
   begin
     ARGV.each do |pattern|
       # if pattern has a '.' in it assume it is a full filename ...
@@ -729,7 +732,7 @@ if ARGV.count.positive?
 else
   # Read metadata for all Note files, and find those altered in the last 24 hours
   mtime = 0
-  puts "Starting npTools at #{time_now_fmttd} for all NP files altered in last #{HOURS_TO_PROCESS} hours."
+  puts "Starting npTools at #{time_now_fmttd} for all NP files altered in last #{HOURS_TO_PROCESS} hours." unless $quiet
   begin
     # Dir.chdir(NP_NOTES_DIR)
     # Dir.glob(['{[!@]**/*,*}.{txt,md}']).each do |this_file|
