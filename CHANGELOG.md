@@ -1,4 +1,7 @@
 # CHANGELOG
+## v1.5.0, 25.10.2020
+- [New] Remove empty header lines and empty header sections
+
 ## v1.4.9, 17.10.2020
 - [New] Add -q (--quiet) option to suppress all output apart from errors
 

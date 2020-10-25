@@ -1,12 +1,12 @@
 #!/usr/bin/ruby
 #-------------------------------------------------------------------------------
 # NotePlan Tools script
-# by Jonathan Clark, v1.4.9, 17.10.2020
+# by Jonathan Clark, v1.5.0, 25.10.2020
 #-------------------------------------------------------------------------------
 # See README.md file for details, how to run and configure it.
 # Repository: https://github.com/jgclark/NotePlan-tools/
 #-------------------------------------------------------------------------------
-VERSION = '1.4.9'.freeze
+VERSION = '1.5.0'.freeze
 
 require 'date'
 require 'time'
@@ -115,15 +115,21 @@ class NPFile
     end
   end
 
-  def remove_empty_tasks
-    # Clean up lines with just * or - in them
-    puts '  remove_empty_tasks ...' if $verbose > 1
+  def clear_empty_tasks_or_headers
+    # Clean up lines with just * or - or #s in them
+    puts '  remove_empty_tasks_or_headers ...' if $verbose > 1
     n = cleaned = 0
     while n < @line_count
       # blank any lines which just have a * or -
       if @lines[n] =~ /^\s*[\*\-]\s*$/
         @lines[n] = ''
         cleaned += 1
+      end
+      # blank any lines which just have #s at the start (and optional following whitespace)
+      if @lines[n] =~ /^#+\s?$/
+        @lines[n] = ''
+        cleaned += 1
+        puts "    cleared an empty header line"
       end
       n += 1
     end
@@ -592,18 +598,60 @@ class NPFile
     end
   end
 
-  def remove_empty_trailing_lines
-    # go backwards through the note, deleting any blanks at the end
-    puts '  remove_empty_trailing_lines ...' if $verbose > 1
+  def remove_empty_header_sections
+    # go backwards through the note, deleting any sections without content
+    puts '  remove_empty_header_sections ...' if $verbose > 1
     cleaned = 0
     n = @line_count - 1
+    # Go through each line in the file
+    later_header_level = this_header_level = 0
+    while n.positive?
+      line = @lines[n]
+      # find header lines
+      # puts "  - #{n}: '#{line.chomp}'"
+      if line =~ /^#+\s\w/
+        # this is a header line
+        line.scan(/^(#+)\s/) { |m| this_header_level = m[0].length }
+        # puts "    - #{later_header_level} / #{this_header_level}"
+        # if later header is same or higher level (fewer #s) as this,
+        # then we can delete this line
+        if later_header_level >= this_header_level
+          # puts "    - Removing empty header line #{n} '#{line.chomp}'" if $verbose > 1
+          @lines.delete_at(n)
+          cleaned += 1
+          @line_count -= 1
+          @is_updated = true
+        end
+        later_header_level = this_header_level
+      elsif line !~ /^$/
+        # this has content but is not a header line
+        later_header_level = 0
+      else
+        # this is a blank line so just ignore it
+      end
+      n -= 1
+    end
+    return unless cleaned.positive?
+
+    @is_updated = true
+    # @line_count = @lines.size
+    puts "  - removed #{cleaned} lines of empty section(s)" if $verbose > 1
+  end
+
+  def remove_multiple_empty_lines
+    # go backwards through the note, deleting any blanks at the end
+    puts '  remove_multiple_empty_lines ...' if $verbose > 1
+    cleaned = 0
+    n = @line_count - 1
+    last_was_empty = false
     while n.positive?
       line_to_test = @lines[n]
-      break unless line_to_test =~ /^$/
-
-      @lines.delete_at(n)
+      if line_to_test =~ /^$/ && last_was_empty
+        @lines.delete_at(n)
+        cleaned += 1
+      end
+      last_was_empty = line_to_test =~ /^$/ ? true : false
       n -= 1
-      cleaned += 1
     end
     return unless cleaned.positive?
 
@@ -774,8 +822,9 @@ if n.positive? # if we have some notes to work on ...
   i = 0
   $notes.each do |note|
     puts "Cleaning file id #{note.id} " + note.title.to_s.bold if $verbose > 0
-    note.remove_empty_tasks
-    note.remove_empty_trailing_lines
+    note.clear_empty_tasks_or_headers
+    note.remove_empty_header_sections
+    note.remove_multiple_empty_lines
     note.remove_tags_dates
     note.process_repeats
     note.move_daily_ref_to_notes if note.is_calendar && options[:move] == 1
