@@ -130,7 +130,6 @@ class NPFile
       if @lines[n] =~ /^#+\s?$/
         @lines[n] = ''
         cleaned += 1
-        puts "    cleared an empty header line"
       end
       n += 1
     end
@@ -183,7 +182,7 @@ class NPFile
 
   def move_daily_ref_to_notes
     # Move tasks with a [[note link]] to that note (inserting after header)
-    # In NP v2.4 and 3.0 there's a slight issue that there can be duplicate 
+    # In NP v2.4 and 3.0 there's a slight issue that there can be duplicate
     # note titles over different sub-folders. This will likely be improved in
     # the future, but for now I'll try to select the most recently-changed if
     # there are matching names.
@@ -210,13 +209,13 @@ class NPFile
       # find the note file to add to
       # expect there to be several with same title: if so then use the one with
       # the most recent modified_time
-      mtime = Time.new(1970,1,1) # i.e. the earlist possible time
+      mtime = Time.new(1970, 1, 1) # i.e. the earlist possible time
       $allNotes.each do |nn|
-        if nn.title == noteName
-          puts "  - found matching title with modified_time #{nn.modified_time}" if $verbose > 1
-          noteToAddTo = nn.id if nn.modified_time > mtime
-          mtime = nn.modified_time
-        end
+        next if nn.title != noteName
+
+        puts "  - found matching title with modified_time #{nn.modified_time}" if $verbose > 1
+        noteToAddTo = nn.id if nn.modified_time > mtime
+        mtime = nn.modified_time
       end
 
       if noteToAddTo # if note is found
@@ -746,7 +745,7 @@ if ARGV.count.positive?
     ARGV.each do |pattern|
       # if pattern has a '.' in it assume it is a full filename ...
       if pattern =~ /\./
-        glob_pattern = pattern 
+        glob_pattern = pattern
       else
         # ... otherwise treat as close to a regex term as possible with Dir.glob
         glob_pattern = '[!@]**/*' + pattern + '*.{md,txt}'
