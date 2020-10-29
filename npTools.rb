@@ -1,7 +1,7 @@
 #!/usr/bin/ruby
 #-------------------------------------------------------------------------------
 # NotePlan Tools script
-# by Jonathan Clark, v1.5.0, 25.10.2020
+# by Jonathan Clark, v1.5.0, 29.10.2020
 #-------------------------------------------------------------------------------
 # See README.md file for details, how to run and configure it.
 # Repository: https://github.com/jgclark/NotePlan-tools/
@@ -33,6 +33,7 @@ NP_BASE_DIR = if STORAGE_TYPE == 'Dropbox'
                 "/Users/#{USERNAME}/Library/Mobile Documents/iCloud~co~noteplan~NotePlan/Documents" # for iCloud storage (default)
               else
                 "/Users/#{USERNAME}/Library/Application Support/co.noteplan.NotePlan3" # for CloudKit storage
+                # will become ~/Library/Containers/co.noteplan.NotePlan3/Data/Library/Application Support/co.noteplan.NotePlan3
               end
 NP_NOTES_DIR = "#{NP_BASE_DIR}/Notes".freeze
 NP_CALENDAR_DIR = "#{NP_BASE_DIR}/Calendar".freeze
@@ -698,7 +699,7 @@ opt_parser = OptionParser.new do |opts|
     puts opts
     exit
   end
-  opts.on('-n', '--nomove', "Don't move Daily items with [[Note]] to the Note") do
+  opts.on('-n', '--nomove', "Don't move Daily items with [[Note]] reference to that Note") do
     options[:move] = 0
   end
   opts.on('-q', '--quiet', 'Suppress all output, apart from error messages. Overrides -v or -w.') do

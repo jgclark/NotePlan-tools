@@ -48,6 +48,8 @@ You can also specify options:
 
 It works with all 3 storage options for storing NotePlan data: CloudKit (the default from NotePlan v3), iCloud Drive and Dropbox.
 
+NB: NotePlan has several options in the Markdown settings for how to mark a task, including `- `. At the moment this script only allows for `* `.
+
 ## Installation and Configuration
 1. Check you have a working Ruby installation.
 2. Install  two ruby gems (libraries) (`gem install colorize optparse`)
