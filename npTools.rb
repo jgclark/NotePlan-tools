@@ -30,10 +30,9 @@ User = Etc.getlogin # for debugging when running by launchctl
 NP_BASE_DIR = if STORAGE_TYPE == 'Dropbox'
                 "/Users/#{USERNAME}/Dropbox/Apps/NotePlan/Documents" # for Dropbox storage
               elsif STORAGE_TYPE == 'iCloudDrive'
-                "/Users/#{USERNAME}/Library/Mobile Documents/iCloud~co~noteplan~NotePlan/Documents" # for iCloud storage (default)
+                "/Users/#{USERNAME}/Library/Mobile Documents/iCloud~co~noteplan~NotePlan/Documents"
               else
-                "/Users/#{USERNAME}/Library/Application Support/co.noteplan.NotePlan3" # for CloudKit storage
-                # will become ~/Library/Containers/co.noteplan.NotePlan3/Data/Library/Application Support/co.noteplan.NotePlan3
+                "/Users/#{USERNAME}/Library/Containers/co.noteplan.NotePlan3/Data/Library/Application Support/co.noteplan.NotePlan3" # for default CloudKit storage (from NP3.0.15 beta)
               end
 NP_NOTES_DIR = "#{NP_BASE_DIR}/Notes".freeze
 NP_CALENDAR_DIR = "#{NP_BASE_DIR}/Calendar".freeze
