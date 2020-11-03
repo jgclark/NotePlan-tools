@@ -103,7 +103,7 @@ class NPFile
     @line_count = @lines.size
 
     # Now make a title for this file:
-    if @filename =~ /\d{8}\.{txt|md}/
+    if @filename =~ /\d{8}\.(txt|md)/
       # for Calendar file, use the date from filename
       @title = @filename[0..7]
       @is_calendar = true
