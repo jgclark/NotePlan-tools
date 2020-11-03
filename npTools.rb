@@ -1,12 +1,12 @@
 #!/usr/bin/ruby
 #-------------------------------------------------------------------------------
 # NotePlan Tools script
-# by Jonathan Clark, v1.5.0, 29.10.2020
+# by Jonathan Clark, v1.5.1, 3.11.2020
 #-------------------------------------------------------------------------------
 # See README.md file for details, how to run and configure it.
 # Repository: https://github.com/jgclark/NotePlan-tools/
 #-------------------------------------------------------------------------------
-VERSION = '1.5.0'.freeze
+VERSION = '1.5.1'.freeze
 
 require 'date'
 require 'time'
@@ -88,7 +88,7 @@ class NPFile
     # initialise other variables (that don't need to persist with the class)
     n = 0
 
-    # puts "initialising #{@filename} from #{Dir.pwd}"
+    puts "initialising #{@filename} from #{Dir.pwd}" if $verbose > 1
     # Open file and read in all lines (finding any Done and Cancelled headers)
     # NB: needs the encoding line when run from launchctl, otherwise you get US-ASCII invalid byte errors (basically the 'locale' settings are different)
     f = File.open(@filename, 'r', encoding: 'utf-8')
@@ -103,7 +103,7 @@ class NPFile
     @line_count = @lines.size
 
     # Now make a title for this file:
-    if @filename =~ /\d{8}\.txt/
+    if @filename =~ /\d{8}\.{txt|md}/
       # for Calendar file, use the date from filename
       @title = @filename[0..7]
       @is_calendar = true

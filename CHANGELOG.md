@@ -1,6 +1,7 @@
 # CHANGELOG
-## v1.5.1, 30.10.2020
+## v1.5.1, 3.11.2020
 - [Change] Now default to using the sandbox location for CloudKit storage (change from NotePlan 3.0.15 beta)
+- [Fix] Calendar files apparently disappearing if the default file extension is set to .md
 
 ## v1.5.0, 25.10.2020
 - [New] Remove empty header lines and empty header sections
