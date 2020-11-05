@@ -276,7 +276,7 @@ class NPFile
           while n < @line_count
             line_to_check = @lines[n]
             puts "    - l_t_o checking '#{line_to_check}'" if $verbose > 1
-            break if (line_to_check =~ /^$/) || (line_to_check =~ /^#{header_marker}\s/)
+            break if (line_to_check =~ /^\s*$/) || (line_to_check =~ /^#{header_marker}\s/)
 
             lines_to_output += line_to_check
             # Remove this line from the calendar note
@@ -327,7 +327,7 @@ class NPFile
       # and look ahead to see how many lines to move -- all until blank or starting # or *
       linesToMove = 0
       while n < @line_count
-        break if (@lines[n + 1] =~ /^(#+\s+|\*\s+)/) || (@lines[n + 1] =~ /^$/)
+        break if (@lines[n + 1] =~ /^(#+\s+|\*\s+)/) || (@lines[n + 1] =~ /^\s*$/)
 
         linesToMove += 1
         n += 1
@@ -391,7 +391,7 @@ class NPFile
       linesToMove = 0
       while n < @line_count
         linesToMove += 1
-        break if (@lines[n + 1] =~ /^(#+\s+|\*\s+)/) || (@lines[n + 1] =~ /^$/)
+        break if (@lines[n + 1] =~ /^(#+\s+|\*\s+)/) || (@lines[n + 1] =~ /^\s*$/)
 
         n += 1
       end
@@ -622,7 +622,7 @@ class NPFile
           @is_updated = true
         end
         later_header_level = this_header_level
-      elsif line !~ /^$/
+      elsif line !~ /^\s*$/
         # this has content but is not a header line
         later_header_level = 0
       else
@@ -645,11 +645,11 @@ class NPFile
     last_was_empty = false
     while n.positive?
       line_to_test = @lines[n]
-      if line_to_test =~ /^$/ && last_was_empty
+      if line_to_test =~ /^\s*$/ && last_was_empty
         @lines.delete_at(n)
         cleaned += 1
       end
-      last_was_empty = line_to_test =~ /^$/ ? true : false
+      last_was_empty = line_to_test =~ /^\s*$/ ? true : false
       n -= 1
     end
     return unless cleaned.positive?
