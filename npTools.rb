@@ -111,7 +111,6 @@ class NPFile
       # for Calendar file, use the date from filename
       @title = @filename[0..7]
       @is_calendar = true
-      puts $time_today
       @is_today = ( @title == $time_today ? true : false )
     else
       # otherwise use first line (but take off heading characters at the start and starting and ending whitespace)
@@ -831,7 +830,12 @@ if n.positive? # if we have some notes to work on ...
   # puts "Found #{n} notes to process:"
   # For each NP file to process, do the following:
   i = 0
+  $notes.sort!{ |a, b|  a.title <=> b.title }
   $notes.each do |note|
+    if note.is_today && options[:skiptoday]
+      puts "Skipping " + note.title.to_s.bold + " due to --skiptoday option" 
+      next
+    end
     puts "Cleaning file id #{note.id} " + note.title.to_s.bold if $verbose > 0
     note.clear_empty_tasks_or_headers
     note.remove_empty_header_sections
@@ -842,7 +846,7 @@ if n.positive? # if we have some notes to work on ...
     note.use_template_dates unless note.is_calendar
     note.archive_lines if $archive == 1
     # If there have been changes, write out the file
-    note.rewrite_file if note.is_updated unless (note.is_today && options[:skiptoday])
+    note.rewrite_file if note.is_updated 
     i += 1
   end
 else
