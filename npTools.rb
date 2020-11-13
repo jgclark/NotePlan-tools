@@ -1,12 +1,12 @@
 #!/usr/bin/ruby
 #-------------------------------------------------------------------------------
 # NotePlan Tools script
-# by Jonathan Clark, v1.5.1, 3.11.2020
+# by Jonathan Clark, v1.5.2, 13.11.2020
 #-------------------------------------------------------------------------------
 # See README.md file for details, how to run and configure it.
 # Repository: https://github.com/jgclark/NotePlan-tools/
 #-------------------------------------------------------------------------------
-VERSION = '1.5.1'.freeze
+VERSION = '1.5.2'.freeze
 
 require 'date'
 require 'time'
