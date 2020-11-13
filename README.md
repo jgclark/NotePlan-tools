@@ -56,13 +56,16 @@ NB: NotePlan has several options in the Markdown settings for how to mark a task
 3. Download and install the script to a place where it can be found on your filepath (perhaps `/usr/local/bin` or `/bin`)
 4. Make the script executable (`chmod 755 npTools.rb`)
 5. Change the following constants at the top of the script, as required:
-- `STORAGE_TYPE`: select whether you're using `iCloud` for storage (the default) or `CloudKit` (from v3.0) or `Drobpox`. If you're not sure, see NotePlan's `Sync Settings`.
-- `USERNAME`: your macOS username
 - `HOURS_TO_PROCESS`: will process all files changed within this number of hours (default 24)
 - `NUM_HEADER_LINES`: number of lines at the start of a note file to regard as the header. The default is 1. Relevant when moving lines around.
 - `TAGS_TO_REMOVE`: list of tags to remove. Default ["#waiting","#high"]
 - `DATE_TIME_LOG_FORMAT`: date string format to use in logs
 <!-- - `DATE_OFFSET_FORMAT`: date string format to use in date offset patterns -->
+
+## Derived Settings
+- `STORAGE_TYPE`: Based on where NotePlan data files are located - priority is CloudKit > iCloudDrive > DropBox
+- `USERNAME`: Based on ${LOGNAME} environment variable
+- `USER_DIR`: Based on ${HOME} environment variable
 
 ### Automatic running
 If you wish to run this automatically in the background on macOS, you can do this using the built-in `launchctl` system. Here's the configuration file `jgc.npTools.plist` that I use to automatically run `npTools.rb` several times a day:
