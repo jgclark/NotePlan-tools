@@ -20,6 +20,7 @@ NUM_HEADER_LINES = 3 # suits my use, but probably wants to be 1 for most people
 TAGS_TO_REMOVE = ['#waiting', '#high'].freeze # simple array of strings
 DATE_TIME_LOG_FORMAT = '%e %b %Y %H:%M'.freeze # only used in logging
 DATE_OFFSET_FORMAT = '%e-%b-%Y'.freeze # TODO: format used to find date to use in offsets
+DATE_TODAY_FORMAT = '%Y%m%d'.freeze # using this to identify the "today" daily note
 
 #-------------------------------------------------------------------------------
 # Other Constants
@@ -56,6 +57,7 @@ $archive = 0
 $remove_scheduled = 1
 $allNotes = []  # to hold all note objects
 $notes    = []  # to hold all relevant note objects
+$time_today = time_now.strftime(DATE_TODAY_FORMAT)
 
 #-------------------------------------------------------------------------
 # Class definition: NPFile
@@ -67,6 +69,7 @@ class NPFile
   attr_reader :title
   attr_reader :cancelled_header
   attr_reader :done_header
+  attr_reader :is_today
   attr_reader :is_calendar
   attr_reader :is_updated
   attr_reader :filename
@@ -82,6 +85,7 @@ class NPFile
     @line_count = 0
     @cancelled_header = 0
     @done_header = 0
+    @is_today = false
     @is_calendar = false
     @is_updated = false
 
@@ -107,12 +111,15 @@ class NPFile
       # for Calendar file, use the date from filename
       @title = @filename[0..7]
       @is_calendar = true
+      @is_today = ( @title == $time_today ? true : false )
     else
       # otherwise use first line (but take off heading characters at the start and starting and ending whitespace)
       tempTitle = @lines[0].gsub(/^#+\s*/, '')
       @title = tempTitle.gsub(/\s+$/, '')
       @is_calendar = false
+      @is_today = false
     end
+  
   end
 
   def clear_empty_tasks_or_headers
@@ -688,6 +695,7 @@ opt_parser = OptionParser.new do |opts|
   options[:move] = 1
   options[:archive] = 0 # default off at the moment as feature isn't complete
   options[:remove_scheduled] = 1
+  options[:skiptoday] = false
   options[:quiet] = false
   options[:verbose] = 0
   opts.on('-a', '--noarchive', "Don't archive completed tasks into the ## Done section") do
@@ -699,6 +707,9 @@ opt_parser = OptionParser.new do |opts|
   end
   opts.on('-n', '--nomove', "Don't move Daily items with [[Note]] reference to that Note") do
     options[:move] = 0
+  end
+  opts.on('-i', '--skiptoday', "Don't touch today's daily note file") do
+    options[:skiptoday] = true
   end
   opts.on('-q', '--quiet', 'Suppress all output, apart from error messages. Overrides -v or -w.') do
     options[:quiet] = true
@@ -819,7 +830,12 @@ if n.positive? # if we have some notes to work on ...
   # puts "Found #{n} notes to process:"
   # For each NP file to process, do the following:
   i = 0
+  $notes.sort!{ |a, b|  a.title <=> b.title }
   $notes.each do |note|
+    if note.is_today && options[:skiptoday]
+      puts "Skipping " + note.title.to_s.bold + " due to --skiptoday option" 
+      next
+    end
     puts "Cleaning file id #{note.id} " + note.title.to_s.bold if $verbose > 0
     note.clear_empty_tasks_or_headers
     note.remove_empty_header_sections
@@ -830,7 +846,7 @@ if n.positive? # if we have some notes to work on ...
     note.use_template_dates unless note.is_calendar
     note.archive_lines if $archive == 1
     # If there have been changes, write out the file
-    note.rewrite_file if note.is_updated
+    note.rewrite_file if note.is_updated 
     i += 1
   end
 else
