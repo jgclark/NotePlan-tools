@@ -15,8 +15,6 @@ require 'colorize'
 require 'optparse' # more details at https://docs.ruby-lang.org/en/2.1.0/OptionParser.html
 
 # Setting variables to tweak
-USERNAME = 'jonathan'.freeze # change me to your macOS account username
-STORAGE_TYPE = 'CloudKit'.freeze # or Dropbox or iCloudDrive
 HOURS_TO_PROCESS = 24 # by default will process all files changed within this number of hours
 NUM_HEADER_LINES = 3 # suits my use, but probably wants to be 1 for most people
 TAGS_TO_REMOVE = ['#waiting', '#high'].freeze # simple array of strings
@@ -25,15 +23,17 @@ DATE_OFFSET_FORMAT = '%e-%b-%Y'.freeze # TODO: format used to find date to use i
 
 #-------------------------------------------------------------------------------
 # Other Constants
+USERNAME = ENV["LOGNAME"].freeze # pull username from environment
+USER_DIR = ENV["HOME"].freeze # pull home directory from environment
+DROPBOX_DIR = "#{USER_DIR}/Dropbox/Apps/NotePlan/Documents".freeze
+ICLOUDDRIVE_DIR = "#{USER_DIR}/Library/Mobile Documents/iCloud~co~noteplan~NotePlan/Documents".freeze
+CLOUDKIT_DIR = "#{USER_DIR}/Library/Containers/co.noteplan.NotePlan3/Data/Library/Application Support/co.noteplan.NotePlan3".freeze
 TodaysDate = Date.today # can't work out why this needs to be a 'constant' to work -- something about visibility, I suppose
 User = Etc.getlogin # for debugging when running by launchctl
-NP_BASE_DIR = if STORAGE_TYPE == 'Dropbox'
-                "/Users/#{USERNAME}/Dropbox/Apps/NotePlan/Documents" # for Dropbox storage
-              elsif STORAGE_TYPE == 'iCloudDrive'
-                "/Users/#{USERNAME}/Library/Mobile Documents/iCloud~co~noteplan~NotePlan/Documents"
-              else
-                "/Users/#{USERNAME}/Library/Containers/co.noteplan.NotePlan3/Data/Library/Application Support/co.noteplan.NotePlan3" # for default CloudKit storage (from NP3.0.15 beta)
-              end
+NP_BASE_DIR = DROPBOX_DIR if Dir.exist?(DROPBOX_DIR) && Dir[File.join(DROPBOX_DIR, '**', '*')].count { |file| File.file?(file) } > 1
+NP_BASE_DIR = ICLOUDDRIVE_DIR if Dir.exist?(ICLOUDDRIVE_DIR) && Dir[File.join(ICLOUDDRIVE_DIR, '**', '*')].count { |file| File.file?(file) } > 1
+NP_BASE_DIR = CLOUDKIT_DIR if Dir.exist?(CLOUDKIT_DIR) && Dir[File.join(CLOUDKIT_DIR, '**', '*')].count { |file| File.file?(file) } > 1
+
 NP_NOTES_DIR = "#{NP_BASE_DIR}/Notes".freeze
 NP_CALENDAR_DIR = "#{NP_BASE_DIR}/Calendar".freeze
 
@@ -136,7 +136,7 @@ class NPFile
 
     @is_updated = true
     @line_count = @lines.size
-    puts "  - removed #{cleaned} emtpy lines" if $verbose > 0
+    puts "  - removed #{cleaned} empty lines" if $verbose > 0
   end
 
   def remove_tags_dates
