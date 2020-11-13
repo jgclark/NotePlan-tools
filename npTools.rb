@@ -1,12 +1,12 @@
 #!/usr/bin/ruby
 #-------------------------------------------------------------------------------
 # NotePlan Tools script
-# by Jonathan Clark, v1.5.2, 13.11.2020
+# by Jonathan Clark, v1.6.1, 13.11.2020
 #-------------------------------------------------------------------------------
 # See README.md file for details, how to run and configure it.
 # Repository: https://github.com/jgclark/NotePlan-tools/
 #-------------------------------------------------------------------------------
-VERSION = '1.5.2'.freeze
+VERSION = '1.6.1'.freeze
 
 require 'date'
 require 'time'
@@ -24,13 +24,13 @@ DATE_TODAY_FORMAT = '%Y%m%d'.freeze # using this to identify the "today" daily n
 
 #-------------------------------------------------------------------------------
 # Other Constants
-USERNAME = ENV["LOGNAME"].freeze # pull username from environment
-USER_DIR = ENV["HOME"].freeze # pull home directory from environment
+USERNAME = ENV['LOGNAME'] # pull username from environment
+USER_DIR = ENV['HOME'] # pull home directory from environment
 DROPBOX_DIR = "#{USER_DIR}/Dropbox/Apps/NotePlan/Documents".freeze
 ICLOUDDRIVE_DIR = "#{USER_DIR}/Library/Mobile Documents/iCloud~co~noteplan~NotePlan/Documents".freeze
 CLOUDKIT_DIR = "#{USER_DIR}/Library/Containers/co.noteplan.NotePlan3/Data/Library/Application Support/co.noteplan.NotePlan3".freeze
 TodaysDate = Date.today # can't work out why this needs to be a 'constant' to work -- something about visibility, I suppose
-User = Etc.getlogin # for debugging when running by launchctl
+# User = Etc.getlogin # for debugging when running by launchctl
 NP_BASE_DIR = DROPBOX_DIR if Dir.exist?(DROPBOX_DIR) && Dir[File.join(DROPBOX_DIR, '**', '*')].count { |file| File.file?(file) } > 1
 NP_BASE_DIR = ICLOUDDRIVE_DIR if Dir.exist?(ICLOUDDRIVE_DIR) && Dir[File.join(ICLOUDDRIVE_DIR, '**', '*')].count { |file| File.file?(file) } > 1
 NP_BASE_DIR = CLOUDKIT_DIR if Dir.exist?(CLOUDKIT_DIR) && Dir[File.join(CLOUDKIT_DIR, '**', '*')].count { |file| File.file?(file) } > 1
@@ -111,7 +111,7 @@ class NPFile
       # for Calendar file, use the date from filename
       @title = @filename[0..7]
       @is_calendar = true
-      @is_today = ( @title == $time_today ? true : false )
+      @is_today = @title == $time_today
     else
       # otherwise use first line (but take off heading characters at the start and starting and ending whitespace)
       tempTitle = @lines[0].gsub(/^#+\s*/, '')
@@ -119,7 +119,6 @@ class NPFile
       @is_calendar = false
       @is_today = false
     end
-  
   end
 
   def clear_empty_tasks_or_headers
@@ -146,15 +145,15 @@ class NPFile
     puts "  - removed #{cleaned} empty lines" if $verbose > 0
   end
 
-  def remove_tags_dates
-    # remove unneeded tags or >dates from complete or cancelled tasks
-    puts '  remove_tags_dates ...' if $verbose > 1
+  def remove_unwanted_tags_dates
+    # removes specific tags and >dates from complete or cancelled tasks
+    puts '  remove_unwanted_tags_dates ...' if $verbose > 1
     n = cleaned = 0
     while n < @line_count
-      # remove any >YYYY-MM-DD on completed or cancelled tasks
+      # remove any <YYYY-MM-DD on completed or cancelled tasks
       if $remove_scheduled == 1
-        if (@lines[n] =~ /\s>\d{4}\-\d{2}\-\d{2}/) && (@lines[n] =~ /\[(x|-)\]/)
-          @lines[n].gsub!(/\s>\d{4}\-\d{2}\-\d{2}/, '')
+        if (@lines[n] =~ /\s<\d{4}\-\d{2}\-\d{2}/) && (@lines[n] =~ /\[(x|-)\]/)
+          @lines[n].gsub!(/\s<\d{4}\-\d{2}\-\d{2}/, '')
           cleaned += 1
         end
       end
@@ -171,7 +170,28 @@ class NPFile
     return unless cleaned.positive?
 
     @is_updated = true
-    puts "  - removed #{cleaned} tags/dates" if $verbose > 0
+    puts "  - removed #{cleaned} tags" if $verbose > 0
+  end
+
+  def remove_scheduled
+    # remove [>] tasks from calendar notes, as there will be a duplicate
+    # (whether or not the 'Append links when scheduling' option is set or not)
+    puts '  remove_scheduled ...' if $verbose > 1
+    n = cleaned = 0
+    while n < @line_count
+      # Empty any [>] todo lines
+      if (@lines[n] =~ /\[>\]/)
+        @lines.delete_at(n)
+        @line_count -= 1
+        n -= 1
+        cleaned += 1
+      end
+      n += 1
+    end
+    return unless cleaned.positive?
+
+    @is_updated = true
+    puts "  - removed #{cleaned} scheduled" if $verbose > 0
   end
 
   def insert_new_line(new_line, line_number)
@@ -534,8 +554,10 @@ class NPFile
     end
   end
 
-  def process_repeats
-    # process any completed (or cancelled) tasks with @repeat(..) tags
+  def process_repeats_and_done
+    # Process any completed (or cancelled) tasks with @repeat(..) tags,
+    # and also remove the HH:MM portion of any @done(...) tasks.
+    #
     # When interval is of the form +2w it will duplicate the task for 2 weeks
     # after the date is was completed.
     # When interval is of the form 2w it will duplicate the task for 2 weeks
@@ -545,8 +567,8 @@ class NPFile
     # To work it relies on finding @done(YYYY-MM-DD HH:MM) tags that haven't yet been
     # shortened to @done(YYYY-MM-DD).
     # It includes cancelled tasks as well; to remove a repeat entirely, remoce
-    # the @repeat tag.
-    puts '  process_repeats ...' if $verbose > 1
+    # the @repeat tag from the task in NotePlan.
+    puts '  process_repeats_and_done ...' if $verbose > 1
     n = cleaned = 0
     outline = ''
     # Go through each line in the file
@@ -830,23 +852,24 @@ if n.positive? # if we have some notes to work on ...
   # puts "Found #{n} notes to process:"
   # For each NP file to process, do the following:
   i = 0
-  $notes.sort!{ |a, b|  a.title <=> b.title }
+  $notes.sort! { |a, b| a.title <=> b.title }
   $notes.each do |note|
     if note.is_today && options[:skiptoday]
-      puts "Skipping " + note.title.to_s.bold + " due to --skiptoday option" 
+      puts 'Skipping ' + note.title.to_s.bold + ' due to --skiptoday option'
       next
     end
     puts "Cleaning file id #{note.id} " + note.title.to_s.bold if $verbose > 0
     note.clear_empty_tasks_or_headers
     note.remove_empty_header_sections
+    note.remove_unwanted_tags_dates
+    note.remove_scheduled if note.is_calendar
+    note.process_repeats_and_done
     note.remove_multiple_empty_lines
-    note.remove_tags_dates
-    note.process_repeats
     note.move_daily_ref_to_notes if note.is_calendar && options[:move] == 1
     note.use_template_dates unless note.is_calendar
     note.archive_lines if $archive == 1
     # If there have been changes, write out the file
-    note.rewrite_file if note.is_updated 
+    note.rewrite_file if note.is_updated
     i += 1
   end
 else

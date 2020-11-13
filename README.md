@@ -5,10 +5,11 @@ Each time the script runs, it:
 
 **Tidies up** data files, by:
 1. removing the time part of any `@done(...)` mentions that NotePlan automatically adds when the 'Append Completion Date' option is on.
-2. removing `#waiting` or `#high` tags or `>dates` from completed or cancelled tasks (configurable)
-3. removing any lines with just * or - or starting #s
-4. removing header lines without any content before the next header line of the same or higher level (i.e. fewer `#`s)
-5. removing any multiple consecutive blank lines.
+2. removing `#waiting` or `#high` tags or `<dates` from completed or cancelled tasks (configurable)
+3. removing scheduled (`* [>] task`) items in calendar files (as they've been copied to a new day)
+4. removing any lines with just * or - or starting #s
+5. removing header lines without any content before the next header line of the same or higher level (i.e. fewer `#`s)
+6. removing any multiple consecutive blank lines.
 
 Moves any Daily note entries with a `[[Note link]]` in it to that note, **filing** them directly after the header section. In more detail:
 - where the line is a task, it moves the task and any following indented lines (optionally terminated by a blank line)
