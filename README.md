@@ -14,6 +14,7 @@ Each time the script runs, it:
 Moves any Daily note entries with a `[[Note link]]` in it to that note, **filing** them directly after the header section. In more detail:
 - where the line is a task, it moves the task and any following indented lines (optionally terminated by a blank line)
 - where the line is a heading, it moves the heading and all following lines until a blank line, or the next heading of the same level
+- where the note for a  `[[Note link]]` doesn't exist, it is created in the top-level Notes folder first
 - This feature can be turned off using the `-n` option.
 
 Changes any mentions of **date offset patterns** (e.g. `{-10d}`, `{+2w}`, `{-3m}` to being scheduled dates (e.g. `>2020-02-27`), if it can find a DD-MM-YYYY date pattern in the previous markdown heading or previous main task if it has sub-tasks. This allows for users to define **templates** and copy and paste them into the note, set the due date at the start, and the other dates are then worked out for you.

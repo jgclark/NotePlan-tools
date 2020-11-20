@@ -1,4 +1,7 @@
 # CHANGELOG
+
+## 1.7.0, 19.11.2020
+- [New] where the note for a  `[[Note link]]` doesn't exist, it is created in the top-level Notes folder first
 ## v1.6.1, 13.11.2020
 - [New] remove [>] tasks from calendar notes, as there will be a duplicate (whether or not the 'Append links when scheduling' option is set or not)
 
