@@ -50,3 +50,4 @@ build-iPhoneSimulator/
 .rvmrc
 .solargraph.yml
 .vscode/settings.json
+.vscode/launch.json
