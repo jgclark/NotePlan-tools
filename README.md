@@ -11,13 +11,15 @@ Each time the script runs, it:
 5. removing header lines without any content before the next header line of the same or higher level (i.e. fewer `#`s)
 6. removing any multiple consecutive blank lines.
 
-Moves any Daily note entries with a `[[Note link]]` in it to that note, **filing** them directly after the header section. In more detail:
+Moves any Daily (Calendar) note entries with a `[[Note title]]` in it to the mentioned note, **filing** them directly after the header section. In more detail:
 - where the line is a task, it moves the task and any following indented lines (optionally terminated by a blank line)
 - where the line is a heading, it moves the heading and all following lines until a blank line, or the next heading of the same level
 - where the note for a  `[[Note link]]` doesn't exist, it is created in the top-level Notes folder first
 - This feature can be turned off using the `-n` option.
 
-Changes any mentions of **date offset patterns** (e.g. `{-10d}`, `{+2w}`, `{-3m}` to being scheduled dates (e.g. `>2020-02-27`), if it can find a DD-MM-YYYY date pattern in the previous markdown heading or previous main task if it has sub-tasks. This allows for users to define **templates** and copy and paste them into the note, set the due date at the start, and the other dates are then worked out for you.
+NB: This only operates from Daily (Calendar) notes; it therefore doesn't interfere with **linking and backlinking** between main notes.
+
+Changes any mentions of **date offset patterns** (e.g. `{-10d}`, `{+2w}`, `{-3m}` to being scheduled dates (e.g. `>2020-02-27`), if it can find a DD-MM-YYYY date pattern in the previous markdown heading or previous main task if it has sub-tasks. This allows for users to define simple **templates** and copy and paste them into the note, set the due date at the start, and the other dates are then worked out for you.
 - Valid intervals are specified as `[+][0-9][dwmqy]`. This allows for `d`ays, `w`eeks, `m`onths, `q`uarters or `y`ears.
 - There's also the special case `{0d}` meaning on the day itself
 - It also ignores offsets in a section with a heading that includes a #template hashtag.
@@ -56,20 +58,17 @@ It works with all 3 storage options for storing NotePlan data: CloudKit (the def
 
 ## Installation and Configuration
 1. Check you have a working Ruby installation.
-2. Install  two ruby gems (libraries) (`gem install colorize optparse`)
-3. Download and install the script to a place where it can be found on your filepath (perhaps `/usr/local/bin` or `/bin`)
+2. Install two ruby gems (libraries) (`gem install colorize optparse`)
+3. Download and install the script to a place where it can be found on your filepath (perhaps `/usr/local/bin` or `~/bin`)
 4. Make the script executable (`chmod 755 npTools.rb`)
 5. Change the following constants at the top of the script, as required:
 - `HOURS_TO_PROCESS`: will process all files changed within this number of hours (default 24)
 - `NUM_HEADER_LINES`: number of lines at the start of a note file to regard as the header. The default is 1. Relevant when moving lines around.
 - `TAGS_TO_REMOVE`: list of tags to remove. Default ["#waiting","#high"]
 - `DATE_TIME_LOG_FORMAT`: date string format to use in logs
+- for completeness, `NP_BASE_DIR` automatically works out where NotePlan data files are located. (If there are multiple isntallations it selects using the priority CloudKit > iCloudDrive > DropBox.)
 <!-- - `DATE_OFFSET_FORMAT`: date string format to use in date offset patterns -->
-
-## Derived Settings
-- `STORAGE_TYPE`: Based on where NotePlan data files are located - priority is CloudKit > iCloudDrive > DropBox
-- `USERNAME`: Based on ${LOGNAME} environment variable
-- `USER_DIR`: Based on ${HOME} environment variable
+6. Then run `ruby npTools.rb [-options]`
 
 ### Automatic running
 If you wish to run this automatically in the background on macOS, you can do this using the built-in `launchctl` system. Here's the configuration file `jgc.npTools.plist` that I use to automatically run `npTools.rb` several times a day:

@@ -11,11 +11,12 @@ VERSION = '1.7.0'.freeze
 require 'date'
 require 'time'
 require 'cgi'
-# require 'etc' # for login lookup
 require 'colorize'
 require 'optparse' # more details at https://docs.ruby-lang.org/en/2.1.0/OptionParser.html
 
+#-------------------------------------------------------------------------------
 # Setting variables to tweak
+#-------------------------------------------------------------------------------
 HOURS_TO_PROCESS = 24 # by default will process all files changed within this number of hours
 NUM_HEADER_LINES = 3 # suits my use, but probably wants to be 1 for most people
 TAGS_TO_REMOVE = ['#waiting', '#high'].freeze # simple array of strings
@@ -24,25 +25,21 @@ DATE_OFFSET_FORMAT = '%e-%b-%Y'.freeze # TODO: format used to find date to use i
 DATE_TODAY_FORMAT = '%Y%m%d'.freeze # using this to identify the "today" daily note
 
 #-------------------------------------------------------------------------------
-# Other Constants
+# Other Constants & Settings
+#-------------------------------------------------------------------------------
 USERNAME = ENV['LOGNAME'] # pull username from environment
 USER_DIR = ENV['HOME'] # pull home directory from environment
 DROPBOX_DIR = "#{USER_DIR}/Dropbox/Apps/NotePlan/Documents".freeze
 ICLOUDDRIVE_DIR = "#{USER_DIR}/Library/Mobile Documents/iCloud~co~noteplan~NotePlan/Documents".freeze
 CLOUDKIT_DIR = "#{USER_DIR}/Library/Containers/co.noteplan.NotePlan3/Data/Library/Application Support/co.noteplan.NotePlan3".freeze
-TodaysDate = Date.today # can't work out why this needs to be a 'constant' to work -- something about visibility, I suppose
-# User = Etc.getlogin # for debugging when running by launchctl
-NP_BASE_DIR = DROPBOX_DIR if Dir.exist?(DROPBOX_DIR) && Dir[File.join(DROPBOX_DIR, '**', '*')].count { |file| File.file?(file) } > 1
-NP_BASE_DIR = ICLOUDDRIVE_DIR if Dir.exist?(ICLOUDDRIVE_DIR) && Dir[File.join(ICLOUDDRIVE_DIR, '**', '*')].count { |file| File.file?(file) } > 1
-NP_BASE_DIR = CLOUDKIT_DIR if Dir.exist?(CLOUDKIT_DIR) && Dir[File.join(CLOUDKIT_DIR, '**', '*')].count { |file| File.file?(file) } > 1
-NP_NOTES_DIR = "#{NP_BASE_DIR}/Notes".freeze
-NP_CALENDAR_DIR = "#{NP_BASE_DIR}/Calendar".freeze
+# TodaysDate = Date.today # can't work out why this needs to be a 'constant' to work -- something about visibility, I suppose
+np_base_dir = DROPBOX_DIR if Dir.exist?(DROPBOX_DIR) && Dir[File.join(DROPBOX_DIR, '**', '*')].count { |file| File.file?(file) } > 1
+np_base_dir = ICLOUDDRIVE_DIR if Dir.exist?(ICLOUDDRIVE_DIR) && Dir[File.join(ICLOUDDRIVE_DIR, '**', '*')].count { |file| File.file?(file) } > 1
+np_base_dir = CLOUDKIT_DIR if Dir.exist?(CLOUDKIT_DIR) && Dir[File.join(CLOUDKIT_DIR, '**', '*')].count { |file| File.file?(file) } > 1
+NP_NOTES_DIR = "#{np_base_dir}/Notes".freeze
+NP_CALENDAR_DIR = "#{np_base_dir}/Calendar".freeze
 
-# Other variables
-time_now = Time.now
-time_now_fmttd = time_now.strftime(DATE_TIME_LOG_FORMAT)
-
-# Colours, using the colorization gem
+# Colours to use with the colorization gem
 # to show some possible combinations, run  String.color_samples
 # to show list of possible modes, run   puts String.modes  (e.g. underline, bold, blink)
 String.disable_colorization false
@@ -51,6 +48,8 @@ InfoColour = :yellow
 WarningColour = :light_red
 
 # Variables that need to be globally available
+time_now = Time.now
+time_now_fmttd = time_now.strftime(DATE_TIME_LOG_FORMAT)
 $verbose = 0
 $archive = 0
 $remove_scheduled = 1
