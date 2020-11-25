@@ -773,10 +773,11 @@ opt_parser = OptionParser.new do |opts|
   options[:move] = 1
   options[:archive] = 0 # default off at the moment as feature isn't complete
   options[:remove_scheduled] = 1
+  options[:skipfile] = nil
   options[:skiptoday] = false
   options[:quiet] = false
   options[:verbose] = 0
-  opts.on('-a', '--noarchive', "Don't archive completed tasks into the ## Done section") do
+  opts.on('-a', '--noarchive', "Don't archive completed tasks into the ## Done section") do 
     options[:archive] = 0
   end
   opts.on('-h', '--help', 'Show this help') do
@@ -785,6 +786,9 @@ opt_parser = OptionParser.new do |opts|
   end
   opts.on('-n', '--nomove', "Don't move Daily items with [[Note]] reference to that Note") do
     options[:move] = 0
+  end
+  opts.on('-f', '--skipfile=FILE', "Don't process specific file") do |skipfile| 
+    options[:skipfile] = skipfile
   end
   opts.on('-i', '--skiptoday', "Don't touch today's daily note file") do
     options[:skiptoday] = true
@@ -907,6 +911,10 @@ if $notes.count.positive? # if we have some files to work on ...
   $notes.each do |note|
     if note.is_today && options[:skiptoday]
       puts 'Skipping ' + note.title.to_s.bold + ' due to --skiptoday option'
+      next
+    end
+    if note.title == options[:skipfile]
+      puts 'Skipping ' + note.title.to_s.bold + ' due to --skipfile option'
       next
     end
     puts "Cleaning file id #{note.id} " + note.title.to_s.bold if $verbose > 0
