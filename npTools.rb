@@ -688,6 +688,7 @@ class NPFile
     n = @line_count - 1
     # Go through each line in the file
     later_header_level = this_header_level = 0
+    at_eof = 1
     while n.positive?
       line = @lines[n]
       # find header lines
@@ -698,8 +699,8 @@ class NPFile
         # puts "    - #{later_header_level} / #{this_header_level}"
         # if later header is same or higher level (fewer #s) as this,
         # then we can delete this line
-        if later_header_level >= this_header_level
-          # puts "    - Removing empty header line #{n} '#{line.chomp}'" if $verbose > 1
+        if later_header_level >= this_header_level || at_eof == 1
+          puts "    - Removing empty header line #{n} '#{line.chomp}'" if $verbose > 1
           @lines.delete_at(n)
           cleaned += 1
           @line_count -= 1
@@ -709,6 +710,7 @@ class NPFile
       elsif line !~ /^\s*$/
         # this has content but is not a header line
         later_header_level = 0
+        at_eof = 0
       else
         # this is a blank line so just ignore it
       end
