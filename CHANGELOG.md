@@ -1,4 +1,14 @@
 # CHANGELOG
+
+## 1.7.0, 19.11.2020
+- [New] where the note for a  `[[Note link]]` doesn't exist, it is created in the top-level Notes folder first
+## v1.6.1, 13.11.2020
+- [New] remove [>] tasks from calendar notes, as there will be a duplicate (whether or not the 'Append links when scheduling' option is set or not)
+
+## v1.6, 13.11.2020
+- [New] Added the command line info for --skiptoday [thanks to @BMStroh, PR28]
+- [Improve] Make the configuration easier for first time users [thanks to @BMStroh, PR27]
+
 ## v1.5.1, 3.11.2020
 - [Change] Now default to using the sandbox location for CloudKit storage (change from NotePlan 3.0.15 beta)
 - [Fix] Calendar files apparently disappearing if the default file extension is set to .md

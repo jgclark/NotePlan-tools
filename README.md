@@ -5,14 +5,16 @@ Each time the script runs, it:
 
 **Tidies up** data files, by:
 1. removing the time part of any `@done(...)` mentions that NotePlan automatically adds when the 'Append Completion Date' option is on.
-2. removing `#waiting` or `#high` tags or `>dates` from completed or cancelled tasks (configurable)
-3. removing any lines with just * or - or starting #s
-4. removing header lines without any content before the next header line of the same or higher level (i.e. fewer `#`s)
-5. removing any multiple consecutive blank lines.
+2. removing `#waiting` or `#high` tags or `<dates` from completed or cancelled tasks (configurable)
+3. removing scheduled (`* [>] task`) items in calendar files (as they've been copied to a new day)
+4. removing any lines with just * or - or starting #s
+5. removing header lines without any content before the next header line of the same or higher level (i.e. fewer `#`s)
+6. removing any multiple consecutive blank lines.
 
 Moves any Daily note entries with a `[[Note link]]` in it to that note, **filing** them directly after the header section. In more detail:
 - where the line is a task, it moves the task and any following indented lines (optionally terminated by a blank line)
 - where the line is a heading, it moves the heading and all following lines until a blank line, or the next heading of the same level
+- where the note for a  `[[Note link]]` doesn't exist, it is created in the top-level Notes folder first
 - This feature can be turned off using the `-n` option.
 
 Changes any mentions of **date offset patterns** (e.g. `{-10d}`, `{+2w}`, `{-3m}` to being scheduled dates (e.g. `>2020-02-27`), if it can find a DD-MM-YYYY date pattern in the previous markdown heading or previous main task if it has sub-tasks. This allows for users to define **templates** and copy and paste them into the note, set the due date at the start, and the other dates are then worked out for you.
@@ -40,15 +42,16 @@ There are 2 ways of running the script:
 
 You can also specify options:
 - `-h` for help, 
-- `-a` (`--noarchive`) don't archive completed tasks into the ## Done section
-- `-n` (`--nomove`) to turn off moving mentions of [[Note]] in a calendar day file to the [[Note]]
+- `-a` (`--noarchive`) don't archive completed tasks into the `# Done` section
+- `-n` (`--nomove`) turn off moving mentions of [[Note]] in a daily calendar day file to the [[Note]]. You'll want to do this if you're using the [[...]] notation for backlinks (from NP v3.0.15 onwards)
 - `-s` (`--keepschedules`) keep the scheduled (>) dates of completed tasks
+- `-i` (`--skiptoday`) don't process today's file
 - `-v` for verbose output 
 - `-w` for more verbose output
 
 It works with all 3 storage options for storing NotePlan data: CloudKit (the default from NotePlan v3), iCloud Drive and Dropbox.
 
-NB: NotePlan has several options in the Markdown settings for how to mark a task, including `- `. At the moment this script only allows for `* `.
+**NB**: NotePlan has several options in the Markdown settings for how to mark a task, including `- `. At the moment this script only allows for `* `.
 
 ## Installation and Configuration
 1. Check you have a working Ruby installation.
@@ -56,13 +59,16 @@ NB: NotePlan has several options in the Markdown settings for how to mark a task
 3. Download and install the script to a place where it can be found on your filepath (perhaps `/usr/local/bin` or `/bin`)
 4. Make the script executable (`chmod 755 npTools.rb`)
 5. Change the following constants at the top of the script, as required:
-- `STORAGE_TYPE`: select whether you're using `iCloud` for storage (the default) or `CloudKit` (from v3.0) or `Drobpox`. If you're not sure, see NotePlan's `Sync Settings`.
-- `USERNAME`: your macOS username
 - `HOURS_TO_PROCESS`: will process all files changed within this number of hours (default 24)
 - `NUM_HEADER_LINES`: number of lines at the start of a note file to regard as the header. The default is 1. Relevant when moving lines around.
 - `TAGS_TO_REMOVE`: list of tags to remove. Default ["#waiting","#high"]
 - `DATE_TIME_LOG_FORMAT`: date string format to use in logs
 <!-- - `DATE_OFFSET_FORMAT`: date string format to use in date offset patterns -->
+
+## Derived Settings
+- `STORAGE_TYPE`: Based on where NotePlan data files are located - priority is CloudKit > iCloudDrive > DropBox
+- `USERNAME`: Based on ${LOGNAME} environment variable
+- `USER_DIR`: Based on ${HOME} environment variable
 
 ### Automatic running
 If you wish to run this automatically in the background on macOS, you can do this using the built-in `launchctl` system. Here's the configuration file `jgc.npTools.plist` that I use to automatically run `npTools.rb` several times a day:
