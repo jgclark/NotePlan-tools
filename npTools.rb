@@ -692,11 +692,11 @@ class NPFile
     while n.positive?
       line = @lines[n]
       # find header lines
-      puts "  - #{n}: '#{line.chomp}'"
+      # puts "  - #{n}: '#{line.chomp}'"
       if line =~ /^#+\s\w/
         # this is a header line
         line.scan(/^(#+)\s/) { |m| this_header_level = m[0].length }
-        puts "    - #{later_header_level} / #{this_header_level}"
+        # puts "    - #{later_header_level} / #{this_header_level}"
         # if later header is same or higher level (fewer #s) as this,
         # then we can delete this line
         if later_header_level >= this_header_level || at_eof == 1
