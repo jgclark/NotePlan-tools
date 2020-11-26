@@ -1,7 +1,12 @@
 # CHANGELOG
 
+## 1.7.1, 26.11.2020
+- [New] add --skipfile=file option to ignore particular files [thanks to @BMStroh, issue 30]
+- [Fix] Blank headers at EOF not removed [thanks to @BMStroh, PR31]
+
 ## 1.7.0, 19.11.2020
 - [New] where the note for a  `[[Note link]]` doesn't exist, it is created in the top-level Notes folder first
+
 ## v1.6.1, 13.11.2020
 - [New] remove [>] tasks from calendar notes, as there will be a duplicate (whether or not the 'Append links when scheduling' option is set or not)
 
