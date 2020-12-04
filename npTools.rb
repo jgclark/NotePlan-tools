@@ -787,7 +787,7 @@ opt_parser = OptionParser.new do |opts|
   opts.on('-n', '--nomove', "Don't move Daily items with [[Note]] reference to that Note") do
     options[:move] = 0
   end
-  opts.on('-f', '--skipfile=FILE', Array, "Don't process specific file") do |skipfile| 
+  opts.on('-f', '--skipfile=TITLE[,TITLE2,TITLE3,etc]', Array, "Don't process specific file(s)") do |skipfile| 
     options[:skipfile] = skipfile
   end
   opts.on('-i', '--skiptoday', "Don't touch today's daily note file") do
