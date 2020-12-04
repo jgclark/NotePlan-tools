@@ -45,7 +45,7 @@ You can also specify options:
 - `-a` (`--noarchive`) don't archive completed tasks into the `# Done` section
 - `-n` (`--nomove`) turn off moving mentions of [[Note]] in a daily calendar day file to the [[Note]]. You'll want to do this if you're using the [[...]] notation for backlinks (from NP v3.0.15 onwards)
 - `-s` (`--keepschedules`) keep the scheduled (>) dates of completed tasks
-- `-f` (`--skipfile=NOTETITLE`) don't process specific note
+- `-f` (`--skipfile=NOTETITLE[,NOTETITLE2,etc]`) don't process specific note(s)
 - `-i` (`--skiptoday`) don't process today's file
 - `-v` for verbose output 
 - `-w` for more verbose output
