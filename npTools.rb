@@ -1,12 +1,12 @@
 #!/usr/bin/ruby
 #-------------------------------------------------------------------------------
 # NotePlan Tools script
-# by Jonathan Clark, v1.7.1, 5.12.2020
+# by Jonathan Clark, v1.7.2, 5.12.2020
 #-------------------------------------------------------------------------------
 # See README.md file for details, how to run and configure it.
 # Repository: https://github.com/jgclark/NotePlan-tools/
 #-------------------------------------------------------------------------------
-VERSION = '1.7.1'.freeze
+VERSION = '1.7.2'.freeze
 
 require 'date'
 require 'time'
@@ -73,9 +73,9 @@ def create_new_empty_file(title, ext)
   # - text optional, text will be added to the note
   # - openNote optional, values: yes (opens the note, if not already selected), no
   # - subWindow optional (only Mac), values: yes (opens note in a subwindow) and no
-  # NOTE: So far this can only create notes in the top-level Notes folder 
+  # NOTE: So far this can only create notes in the top-level Notes folder
   # Does cope with emojis in titles.
-  uriEncoded = "noteplan://x-callback-url/addNote?noteTitle="+URI.escape(title)+"&openNote=no"
+  uriEncoded = "noteplan://x-callback-url/addNote?noteTitle=" + URI.escape(title) + "&openNote=no"
   begin
     response = `open "#{uriEncoded}"`
   rescue StandardError
@@ -226,7 +226,7 @@ class NPFile
     n = cleaned = 0
     while n < @line_count
       # Empty any [>] todo lines
-      if (@lines[n] =~ /\[>\]/)
+      if @lines[n] =~ /\[>\]/
         @lines.delete_at(n)
         @line_count -= 1
         n -= 1
@@ -255,7 +255,7 @@ class NPFile
   def move_daily_ref_to_notes
     # Move tasks with a [[note link]] to that note (inserting after header).
     # Checks whether the note exists and if not, creates one first at top level.
-    
+
     # NOTE: In NP v2.4 and 3.0 there's a slight issue that there can be duplicate
     # note titles over different sub-folders. This will likely be improved in
     # the future, but for now I'll try to select the most recently-changed if
@@ -292,14 +292,14 @@ class NPFile
         puts "  - found matching title (id #{noteToAddTo}) " if $verbose > 1
       end
 
-      if !noteToAddTo
+      unless noteToAddTo
         # no existing note was found with this title, so create it and add this text to it
         puts "  - warning: can't find matching note for [[#{noteName}]] -- so will create it".colorize(InfoColour)
         ext = @filename.scan(/\.(.+?)$/).join('')
         create_new_empty_file(noteName, ext) # #FIXME: how to have multiple initializers?
         # now find the id of this newly-created NPFile
         noteToAddTo = $npfile_count
-        f = $allNotes[noteToAddTo].filename
+        # f = $allNotes[noteToAddTo].filename # found that f wasn't being used, so commented out
         puts "    -> file '#{$allNotes[noteToAddTo].filename}' id #{noteToAddTo}" if $verbose > 0
       end
 
@@ -710,8 +710,6 @@ class NPFile
         # this has content but is not a header line
         later_header_level = 0
         at_eof = 0
-      else
-        # this is a blank line so just ignore it
       end
       n -= 1
     end
@@ -778,7 +776,7 @@ opt_parser = OptionParser.new do |opts|
   options[:skiptoday] = false
   options[:quiet] = false
   options[:verbose] = 0
-  opts.on('-a', '--noarchive', "Don't archive completed tasks into the ## Done section") do 
+  opts.on('-a', '--noarchive', "Don't archive completed tasks into the ## Done section") do
     options[:archive] = 0
   end
   opts.on('-h', '--help', 'Show this help') do
@@ -788,7 +786,7 @@ opt_parser = OptionParser.new do |opts|
   opts.on('-n', '--nomove', "Don't move Daily items with [[Note]] reference to that Note") do
     options[:move] = 0
   end
-  opts.on('-f', '--skipfile=TITLE[,TITLE2,TITLE3,etc]', Array, "Don't process specific file(s)") do |skipfile| 
+  opts.on('-f', '--skipfile=TITLE[,TITLE2,TITLE3,etc]', Array, "Don't process specific file(s)") do |skipfile|
     options[:skipfile] = skipfile
   end
   opts.on('-i', '--skiptoday', "Don't touch today's daily note file") do
@@ -813,7 +811,7 @@ $verbose = $quiet ? 0 : options[:verbose] # if quiet, then verbose has to  be 0
 $archive = options[:archive]
 $remove_scheduled = options[:remove_scheduled]
 
-n = 0 # number of notes and daily entries to work on
+# n = 0 # number of notes and daily entries to work on
 
 #--------------------------------------------------------------------------------------
 # Start by reading all Notes files in
