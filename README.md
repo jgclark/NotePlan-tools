@@ -1,7 +1,7 @@
 # NotePlan Tools
 `npTools.rb` is a Ruby script that adds functionality to the [NotePlan app](https://noteplan.co/). Particularly when run frequently, this provides a more flexible system for repeating tasks, allows for due dates to be expressed as offsets which allows for templates, and moves or files items from Daily files to Note files. It incorporates an earlier script to 'clean' or tidy up NotePlan's data files.
 
-Each time the script runs, it:
+Each time the script runs, it does a number of things:
 
 **Tidies up** data files, by:
 1. removing the time part of any `@done(...)` mentions that NotePlan automatically adds when the 'Append Completion Date' option is on.
