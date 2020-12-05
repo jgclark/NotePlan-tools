@@ -688,7 +688,7 @@ class NPFile
     # Go through each line in the file
     later_header_level = this_header_level = 0
     at_eof = 1
-    while n.positive?
+    while n.positive? || n.zero?
       line = @lines[n]
       # find header lines
       # puts "  - #{n}: '#{line.chomp}'"
