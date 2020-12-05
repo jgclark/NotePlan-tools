@@ -1,7 +1,7 @@
 #!/usr/bin/ruby
 #-------------------------------------------------------------------------------
 # NotePlan Tools script
-# by Jonathan Clark, v1.7.1, 26.11.2020
+# by Jonathan Clark, v1.7.1, 5.12.2020
 #-------------------------------------------------------------------------------
 # See README.md file for details, how to run and configure it.
 # Repository: https://github.com/jgclark/NotePlan-tools/
@@ -788,7 +788,7 @@ opt_parser = OptionParser.new do |opts|
   opts.on('-n', '--nomove', "Don't move Daily items with [[Note]] reference to that Note") do
     options[:move] = 0
   end
-  opts.on('-f', '--skipfile=FILE', "Don't process specific file") do |skipfile| 
+  opts.on('-f', '--skipfile=TITLE[,TITLE2,TITLE3,etc]', Array, "Don't process specific file(s)") do |skipfile| 
     options[:skipfile] = skipfile
   end
   opts.on('-i', '--skiptoday', "Don't touch today's daily note file") do
@@ -914,7 +914,7 @@ if $notes.count.positive? # if we have some files to work on ...
       puts 'Skipping ' + note.title.to_s.bold + ' due to --skiptoday option'
       next
     end
-    if note.title == options[:skipfile]
+    if options[:skipfile].include? note.title
       puts 'Skipping ' + note.title.to_s.bold + ' due to --skipfile option'
       next
     end

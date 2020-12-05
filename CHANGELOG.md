@@ -1,5 +1,8 @@
 # CHANGELOG
 
+## v1.7.2, 5.12.2020
+- [Improve] Extended the command line otion --skiptoday to allow comma-separated list of notes to ignore [thanks to @BMStroh PR32]
+
 ## 1.7.1, 26.11.2020
 - [New] add --skipfile=file option to ignore particular files [thanks to @BMStroh, issue 30]
 - [Fix] Blank headers at EOF not removed [thanks to @BMStroh, PR31]
