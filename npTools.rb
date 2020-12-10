@@ -153,7 +153,7 @@ class NPFile
     $npfile_count += 1
     @id = $npfile_count
     @filename = this_file
-    puts "initialising NPFile id #{@id} from #{this_file}" if $verbose > 0
+    puts "initialising NPFile id #{@id} from #{this_file}" if $verbose > 1
     @modified_time = File.exist?(filename) ? File.mtime(this_file) : 0
     @title = nil
     @lines = []
@@ -809,7 +809,7 @@ opt_parser = OptionParser.new do |opts|
   options[:move] = 1
   options[:archive] = 0 # default off at the moment as feature isn't complete
   options[:remove_scheduled] = 1
-  options[:skipfile] = nil
+  options[:skipfile] = ''
   options[:skiptoday] = false
   options[:quiet] = false
   options[:verbose] = 0
