@@ -20,7 +20,7 @@ Moves any Daily (Calendar) note entries with a `[[Note title]]` in it to the men
 NB: This only operates from Daily (Calendar) notes; it therefore doesn't interfere with **linking and backlinking** between main notes.
 
 Changes any mentions of **date offset patterns** (e.g. `{-10d}`, `{+2w}`, `{-3m}` to being scheduled dates (e.g. `>2020-02-27`), if it can find a DD-MM-YYYY date pattern in the previous markdown heading or previous main task if it has sub-tasks. This allows for users to define simple **templates** and copy and paste them into the note, set the due date at the start, and the other dates are then worked out for you.
-- Valid intervals are specified as `[+][0-9][dwmqy]`. This allows for `d`ays, `w`eeks, `m`onths, `q`uarters or `y`ears.
+- Valid intervals are specified as `[+][0-9][bdwmqy]`. This allows for `b`usiness days,  `d`ays, `w`eeks, `m`onths, `q`uarters or `y`ears. (Business days skip weekends. If the existing date happens to be on a weekend, it's treated as being the next working day.)
 - There's also the special case `{0d}` meaning on the day itself
 - It also ignores offsets in a section with a heading that includes a #template hashtag.
 - You can configure the format of the date it's looking for with the DATE_OFFSET_FORMAT variable (see below).
