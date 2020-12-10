@@ -1,6 +1,7 @@
 # CHANGELOG
-## v1.7.3, 10.12.2020
-- [New] Add support for @repeats moving on by `b`usiness days, which skip weekends. [Issue 34]
+
+## v1.7.3. 10.12.2020
+- [New] Allow use of weekdays in repeats and template dates (using 'b' rather than usual 'd' for days) [Issue 32]
 
 ## v1.7.2, 5.12.2020
 - [Improve] Extended the command line otion --skiptoday to allow comma-separated list of notes to ignore [thanks to @BMStroh PR32]

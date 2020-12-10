@@ -6,7 +6,7 @@
 # See README.md file for details, how to run and configure it.
 # Repository: https://github.com/jgclark/NotePlan-tools/
 #-------------------------------------------------------------------------------
-VERSION = '1.7.3'.freeze
+VERSION = '1.7.2'.freeze
 
 require 'date'
 require 'time'
@@ -67,7 +67,6 @@ def calc_offset_date(old_date, interval)
   # - old_date is type
   # - interval is string of form nn[bdwmq]
   #   - where 'b' is weekday (i.e. Monday-Friday in English)
-  #   10th+1=11th +2=14th +3=15th +4=16th +5=17th +6=18th +7=21st
   # puts "    c_o_d: old #{old_date} interval #{interval} ..."
   days_to_add = 0
   unit = interval[-1] # i.e. get last characters
@@ -561,6 +560,33 @@ class NPFile
     @is_updated = true
   end
 
+  def calc_offset_date(old_date, interval)
+    # Calculate next review date, assuming:
+    # - old_date is type
+    # - interval is string of form nn[bdwmq]
+    # puts "    c_o_d: old #{old_date} interval #{interval} ..."
+    days_to_add = 0
+    unit = interval[-1] # i.e. get last characters
+    num = interval.chop.to_i
+    case unit
+    when 'd'
+      days_to_add = num
+    when 'w'
+      days_to_add = num * 7
+    when 'm'
+      days_to_add = num * 30
+    when 'q'
+      days_to_add = num * 90
+    when 'y'
+      days_to_add = num * 365
+    else
+      puts "    Error in calc_offset_date from #{old_date} by #{interval}".colorize(WarningColour)
+    end
+    puts "    c_o_d: with #{old_date} interval #{interval} found #{days_to_add} days_to_add" if $verbose > 1
+    newDate = old_date + days_to_add
+    newDate
+  end
+
   def use_template_dates
     # Take template dates and turn into real dates
     puts '  use_template_dates ...' if $verbose > 1
@@ -593,9 +619,9 @@ class NPFile
 
       # find todo lines with {+3d} or {-4w} etc. plus {0d} special case
       dateOffsetString = ''
-      if (line =~ /\*\s+(\[ \])?/) && (line =~ /\{[\+\-]?\d+[dwm]\}/)
+      if (line =~ /\*\s+(\[ \])?/) && (line =~ /\{[\+\-]?\d+[bdwm]\}/)
         puts "    UTD: Found line '#{line.chomp}'" if $verbose > 1
-        line.scan(/\{([\+\-]?\d+[dwm])\}/) { |m| dateOffsetString = m.join }
+        line.scan(/\{([\+\-]?\d+[bdwm])\}/) { |m| dateOffsetString = m.join }
         if dateOffsetString != '' && !lastWasTemplate
           puts "    UTD: Found DOS #{dateOffsetString} in '#{line.chomp}' and lastWasTemplate=#{lastWasTemplate}" if $verbose > 1
           if currentTargetDate != ''
@@ -822,24 +848,7 @@ $verbose = $quiet ? 0 : options[:verbose] # if quiet, then verbose has to  be 0
 $archive = options[:archive]
 $remove_scheduled = options[:remove_scheduled]
 
-# Test calc_offset_date logic for week days
-TODAYS_DATE = Date.today
-calc_offset_date(TODAYS_DATE, "1b")
-calc_offset_date(TODAYS_DATE-1, "2b")
-calc_offset_date(TODAYS_DATE-2, "3b")
-calc_offset_date(TODAYS_DATE-3, "4b")
-calc_offset_date(TODAYS_DATE-4, "5b")
-calc_offset_date(TODAYS_DATE-4, "0b")
-calc_offset_date(TODAYS_DATE-5, "6b")
-calc_offset_date(TODAYS_DATE-6, "7b")
-calc_offset_date(TODAYS_DATE, "2b")
-calc_offset_date(TODAYS_DATE, "3b")
-calc_offset_date(TODAYS_DATE, "4b")
-calc_offset_date(TODAYS_DATE, "5b")
-calc_offset_date(TODAYS_DATE, "6b")
-calc_offset_date(TODAYS_DATE, "7b")
-
-exit
+# n = 0 # number of notes and daily entries to work on
 
 #--------------------------------------------------------------------------------------
 # Start by reading all Notes files in

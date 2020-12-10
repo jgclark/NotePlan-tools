@@ -20,7 +20,7 @@ Moves any Daily (Calendar) note entries with a `[[Note title]]` in it to the men
 NB: This only operates from Daily (Calendar) notes; it therefore doesn't interfere with **linking and backlinking** between main notes.
 
 Changes any mentions of **date offset patterns** (e.g. `{-10d}`, `{+2w}`, `{-3m}` to being scheduled dates (e.g. `>2020-02-27`), if it can find a DD-MM-YYYY date pattern in the previous markdown heading or previous main task if it has sub-tasks. This allows for users to define simple **templates** and copy and paste them into the note, set the due date at the start, and the other dates are then worked out for you.
-- Valid intervals are specified as `[+][0-9][dwmqy]`. This allows for `d`ays, `w`eeks, `m`onths, `q`uarters or `y`ears.
+- Valid intervals are specified as `[+][0-9][bdwmqy]`. This allows for `b`usiness days,  `d`ays, `w`eeks, `m`onths, `q`uarters or `y`ears. (Business days skip weekends. If the existing date happens to be on a weekend, it's treated as being the next working day.)
 - There's also the special case `{0d}` meaning on the day itself
 - It also ignores offsets in a section with a heading that includes a #template hashtag.
 - You can configure the format of the date it's looking for with the DATE_OFFSET_FORMAT variable (see below).
@@ -31,7 +31,7 @@ Changes any mentions of **date offset patterns** (e.g. `{-10d}`, `{+2w}`, `{-3m}
 | \* Bob's birthday on 14/09/2020<br />&nbsp;&nbsp;\* Find present {-6d}<br />&nbsp;&nbsp;\* Wrap & post present {-3d} <br />&nbsp;&nbsp;\* Call Bob {0d}                                 | \* Bob's birthday on 14/09/2020<br />&nbsp;&nbsp;\* Find present >2020-09-08<br />&nbsp;&nbsp;\* Wrap & post present >2020-09-11<br />&nbsp;&nbsp;\* Call Bob >2020-09-14                                   |
 
 **Creates new repeats** for newly completed tasks that include a `@repeat(interval)`, on the appropriate future date.
-- Valid intervals are specified as `[+][0-9][bdwmqy]`. This allows for `b`usiness days,  `d`ays, `w`eeks, `m`onths, `q`uarters or `y`ears. (The `b`usiness days skip weekends. If for some reason the date is already on a weekend, it treats it as being on the next Monday.)
+- Valid intervals are specified as `[+][0-9][dwmqy]`. This allows for `d`ays, `w`eeks, `m`onths, `q`uarters or `y`ears.
 - When _interval_ is of the form `+2w` it will duplicate the task for 2 weeks after the date the _task was completed_.
 - When _interval_ is of the form `2w` it will duplicate the task for 2 weeks after the date the _task was last due_. If this can't be determined, then it defaults to the first option.
 
