@@ -6,7 +6,7 @@
 # See README.md file for details, how to run and configure it.
 # Repository: https://github.com/jgclark/NotePlan-tools/
 #-------------------------------------------------------------------------------
-VERSION = '1.7.2'.freeze
+VERSION = '1.7.3'.freeze
 
 require 'date'
 require 'time'
