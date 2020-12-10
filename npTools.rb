@@ -1,12 +1,12 @@
 #!/usr/bin/ruby
 #-------------------------------------------------------------------------------
 # NotePlan Tools script
-# by Jonathan Clark, v1.7.2, 5.12.2020
+# by Jonathan Clark, v1.7.3, 10.12.2020
 #-------------------------------------------------------------------------------
 # See README.md file for details, how to run and configure it.
 # Repository: https://github.com/jgclark/NotePlan-tools/
 #-------------------------------------------------------------------------------
-VERSION = '1.7.2'.freeze
+VERSION = '1.7.3'.freeze
 
 require 'date'
 require 'time'
@@ -61,6 +61,44 @@ $npfile_count = -1 # number of NPFile objects created so far (incremented before
 #-------------------------------------------------------------------------
 # Helper definitions
 #-------------------------------------------------------------------------
+
+def calc_offset_date(old_date, interval)
+  # Calculate next review date, assuming:
+  # - old_date is type
+  # - interval is string of form nn[bdwmq]
+  #   - where 'b' is weekday (i.e. Monday-Friday in English)
+  #   10th+1=11th +2=14th +3=15th +4=16th +5=17th +6=18th +7=21st
+  # puts "    c_o_d: old #{old_date} interval #{interval} ..."
+  days_to_add = 0
+  unit = interval[-1] # i.e. get last characters
+  num = interval.chop.to_i
+  case unit
+  when 'b' # week days
+    # Method from Arjen at https://stackoverflow.com/questions/279296/adding-days-to-a-date-but-excluding-weekends
+    # Avoids looping, and copes with negative intervals too
+    current_day_of_week = old_date.strftime("%u").to_i  # = day of week with Monday = 0, .. Sunday = 6
+    dayOfWeek = num < 0 ? (current_day_of_week - 12).modulo(7) : (current_day_of_week + 6).modulo(7) 
+    num -= 1 if dayOfWeek == 6
+    num += 1 if dayOfWeek == -6
+    days_to_add = num + ((num + dayOfWeek).div(5)) * 2
+  when 'd'
+    days_to_add = num
+  when 'w'
+    days_to_add = num * 7
+  when 'm'
+    days_to_add = num * 30 # on average. Better to use >> operator, but it only works for months
+  when 'q'
+    days_to_add = num * 91 # on average
+  when 'y'
+    days_to_add = num * 365 # on average
+  else
+    puts "    Error in calc_offset_date from #{old_date} by #{interval}".colorize(WarningColour)
+  end
+  puts "    c_o_d: with #{old_date} interval #{interval} found #{days_to_add} days_to_add" if $verbose > 1
+  newDate = old_date + days_to_add
+  # implied return newDate
+end
+
 def create_new_empty_file(title, ext)
   # Populate empty NPFile object, adding just title
 
@@ -523,33 +561,6 @@ class NPFile
     @is_updated = true
   end
 
-  def calc_offset_date(old_date, interval)
-    # Calculate next review date, assuming:
-    # - old_date is type
-    # - interval is string of form nn[dwmq]
-    # puts "    c_o_d: old #{old_date} interval #{interval} ..."
-    days_to_add = 0
-    unit = interval[-1] # i.e. get last characters
-    num = interval.chop.to_i
-    case unit
-    when 'd'
-      days_to_add = num
-    when 'w'
-      days_to_add = num * 7
-    when 'm'
-      days_to_add = num * 30
-    when 'q'
-      days_to_add = num * 90
-    when 'y'
-      days_to_add = num * 365
-    else
-      puts "    Error in calc_offset_date from #{old_date} by #{interval}".colorize(WarningColour)
-    end
-    puts "    c_o_d: with #{old_date} interval #{interval} found #{days_to_add} days_to_add" if $verbose > 1
-    newDate = old_date + days_to_add
-    newDate
-  end
-
   def use_template_dates
     # Take template dates and turn into real dates
     puts '  use_template_dates ...' if $verbose > 1
@@ -617,7 +628,7 @@ class NPFile
     # When interval is of the form 2w it will duplicate the task for 2 weeks
     # after the date the task was last due. If this can't be determined,
     # then default to the first option.
-    # Valid intervals are [0-9][dwmqy].
+    # Valid intervals are [0-9][bdwmqy].
     # To work it relies on finding @done(YYYY-MM-DD HH:MM) tags that haven't yet been
     # shortened to @done(YYYY-MM-DD).
     # It includes cancelled tasks as well; to remove a repeat entirely, remoce
@@ -811,7 +822,24 @@ $verbose = $quiet ? 0 : options[:verbose] # if quiet, then verbose has to  be 0
 $archive = options[:archive]
 $remove_scheduled = options[:remove_scheduled]
 
-# n = 0 # number of notes and daily entries to work on
+# Test calc_offset_date logic for week days
+TODAYS_DATE = Date.today
+calc_offset_date(TODAYS_DATE, "1b")
+calc_offset_date(TODAYS_DATE-1, "2b")
+calc_offset_date(TODAYS_DATE-2, "3b")
+calc_offset_date(TODAYS_DATE-3, "4b")
+calc_offset_date(TODAYS_DATE-4, "5b")
+calc_offset_date(TODAYS_DATE-4, "0b")
+calc_offset_date(TODAYS_DATE-5, "6b")
+calc_offset_date(TODAYS_DATE-6, "7b")
+calc_offset_date(TODAYS_DATE, "2b")
+calc_offset_date(TODAYS_DATE, "3b")
+calc_offset_date(TODAYS_DATE, "4b")
+calc_offset_date(TODAYS_DATE, "5b")
+calc_offset_date(TODAYS_DATE, "6b")
+calc_offset_date(TODAYS_DATE, "7b")
+
+exit
 
 #--------------------------------------------------------------------------------------
 # Start by reading all Notes files in

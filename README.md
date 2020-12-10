@@ -31,7 +31,7 @@ Changes any mentions of **date offset patterns** (e.g. `{-10d}`, `{+2w}`, `{-3m}
 | \* Bob's birthday on 14/09/2020<br />&nbsp;&nbsp;\* Find present {-6d}<br />&nbsp;&nbsp;\* Wrap & post present {-3d} <br />&nbsp;&nbsp;\* Call Bob {0d}                                 | \* Bob's birthday on 14/09/2020<br />&nbsp;&nbsp;\* Find present >2020-09-08<br />&nbsp;&nbsp;\* Wrap & post present >2020-09-11<br />&nbsp;&nbsp;\* Call Bob >2020-09-14                                   |
 
 **Creates new repeats** for newly completed tasks that include a `@repeat(interval)`, on the appropriate future date.
-- Valid intervals are specified as `[+][0-9][dwmqy]`. This allows for `d`ays, `w`eeks, `m`onths, `q`uarters or `y`ears.
+- Valid intervals are specified as `[+][0-9][bdwmqy]`. This allows for `b`usiness days,  `d`ays, `w`eeks, `m`onths, `q`uarters or `y`ears. (The `b`usiness days skip weekends. If for some reason the date is already on a weekend, it treats it as being on the next Monday.)
 - When _interval_ is of the form `+2w` it will duplicate the task for 2 weeks after the date the _task was completed_.
 - When _interval_ is of the form `2w` it will duplicate the task for 2 weeks after the date the _task was last due_. If this can't be determined, then it defaults to the first option.
 
