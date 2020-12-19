@@ -1,12 +1,12 @@
 #!/usr/bin/ruby
 #-------------------------------------------------------------------------------
 # NotePlan Tools script
-# by Jonathan Clark, v1.7.3, 10.12.2020
+# by Jonathan Clark, v1.7.4, 19.12.2020
 #-------------------------------------------------------------------------------
 # See README.md file for details, how to run and configure it.
 # Repository: https://github.com/jgclark/NotePlan-tools/
 #-------------------------------------------------------------------------------
-VERSION = '1.7.3'.freeze
+VERSION = '1.7.4'.freeze
 
 require 'date'
 require 'time'
@@ -122,12 +122,12 @@ def create_new_empty_file(title, ext)
 
   # Now read this new file into the $allNotes array
   Dir.chdir(NP_NOTES_DIR)
-  # sleep(3)
+  sleep(3) # wait for the file to become available. TODO: probably a smarter way to do this
   filename = "#{title}.#{ext}"
   new_note = NPFile.new(filename)
   new_note_id = new_note.id
   $allNotes[new_note_id] = new_note
-  # puts "New note id #{new_note_id}. New $allNotes count = #{$allNotes.count}"
+  puts "Added new note id #{new_note_id} with title '#{title}' and filename '#{filename}'. New $allNotes count = #{$allNotes.count}" if $verbose > 1
 end
 
 #-------------------------------------------------------------------------
@@ -196,7 +196,7 @@ class NPFile
   end
 
   # def self.new2(*args)
-  #   # FIXME: Use API instead?
+  #   # TODO: Use API instead?
   #   # This is a second initializer, to create a new empty file, so have to use a different syntax.
   #   # Create empty NPFile object, and then pass to detailed initializer
   #   object = allocate
@@ -304,18 +304,19 @@ class NPFile
     while n < @line_count
       line = @lines[n]
       is_header = false
-      # find todo or header lines with [[note title]] mentions
-      if line !~ /^#+\s+.*\[\[.*\]\]|^\s*.*\[\[.*\]\]/
-        n += 1 # get ready to look at next line
+      # find lines with [[note title]] mentions
+      if line !~ /\[\[.*\]\]|^\s*.*\[\[.*\]\]/ # used to be /^#+\s+.*\[\[.*\]\]|^\s*.*\[\[.*\]\]/
+        # this line doesn't match, so break out of loop and go to look at next line
+        n += 1
         next
       end
-      is_header = true if line =~ /^#+\s+.*\[\[.*\]\]/
+      is_header = true if line =~ /^#+\s+.*/ # used to be /^#+\s+.*\[\[.*\]\]/
 
       # the following regex matches returns an array with one item, so make a string (by join)
       # NB the '+?' gets minimum number of chars, to avoid grabbing contents of several [[notes]] in the same line
       line.scan(/\[\[(.+?)\]\]/) { |m| noteName = m.join }
       puts "  - found note link [[#{noteName}]] in header on line #{n + 1} of #{@line_count}" if is_header && ($verbose > 0)
-      puts "  - found note link [[#{noteName}]] in task on line #{n + 1} of #{@line_count}" if !is_header && ($verbose > 0)
+      puts "  - found note link [[#{noteName}]] in notes on line #{n + 1} of #{@line_count}" if !is_header && ($verbose > 0)
 
       # find the note file to add to
       # expect there to be several with same title: if so then use the one with
@@ -333,7 +334,7 @@ class NPFile
         # no existing note was found with this title, so create it and add this text to it
         puts "  - warning: can't find matching note for [[#{noteName}]] -- so will create it".colorize(InfoColour)
         ext = @filename.scan(/\.(.+?)$/).join('')
-        create_new_empty_file(noteName, ext) # #FIXME: how to have multiple initializers?
+        create_new_empty_file(noteName, ext) # TODO: ideally find a way to have multiple initialisers
         # now find the id of this newly-created NPFile
         noteToAddTo = $npfile_count
         # f = $allNotes[noteToAddTo].filename # found that f wasn't being used, so commented out
@@ -590,6 +591,7 @@ class NPFile
   def use_template_dates
     # Take template dates and turn into real dates
     puts '  use_template_dates ...' if $verbose > 1
+    # TODO: Allow templates to be set inline where there's a deadline set
     dateString = ''
     currentTargetDate = ''
     calcDate = ''
@@ -725,7 +727,7 @@ class NPFile
     # Go through each line in the file
     later_header_level = this_header_level = 0
     at_eof = 1
-    while n.positive? || n.zero?
+    while n.positive? || n.zero? # FIXME: is this BMStroh addition killing some note titles?
       line = @lines[n]
       # find header lines
       # puts "  - #{n}: '#{line.chomp}'"
@@ -788,11 +790,14 @@ class NPFile
                else
                  "#{NP_NOTES_DIR}/#{@filename}"
                end
-    # TODO: needs error handling
-    File.open(filepath, 'w') do |f|
-      @lines.each do |line|
-        f.puts line
+    begin
+      File.open(filepath, 'w') do |f|
+        @lines.each do |line|
+          f.puts line
+        end
       end
+    rescue StandardError => e
+      puts "ERROR: #{e.exception.message} when re-writing note file #{filpath}".colorize(WarningColour)
     end
   end
 end
@@ -946,11 +951,11 @@ if $notes.count.positive? # if we have some files to work on ...
   $notes.sort! { |a, b| a.title <=> b.title }
   $notes.each do |note|
     if note.is_today && options[:skiptoday]
-      puts 'Skipping ' + note.title.to_s.bold + ' due to --skiptoday option'
+      puts 'Skipping ' + note.title.to_s.bold + ' due to --skiptoday option' if $verbose > 0
       next
     end
     if options[:skipfile].include? note.title
-      puts 'Skipping ' + note.title.to_s.bold + ' due to --skipfile option'
+      puts 'Skipping ' + note.title.to_s.bold + ' due to --skipfile option' if $verbose > 0
       next
     end
     puts "Cleaning file id #{note.id} " + note.title.to_s.bold if $verbose > 0

@@ -1,5 +1,8 @@
 # CHANGELOG
 
+## v1.7.4. 19.12.2020
+- [Improve] Clarify documentation to show all sorts of lines in daily notes are moved to the mentioned [[note title]], not just task or header lines. Also loosened unnecessarily strict regexes used here.
+
 ## v1.7.3. 10.12.2020
 - [New] Allow use of weekdays in repeats and template dates (using 'b' rather than usual 'd' for days) [Issue 32]
 

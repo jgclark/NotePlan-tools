@@ -12,12 +12,12 @@ Each time the script runs, it does a number of things:
 6. removing any multiple consecutive blank lines.
 
 Moves any Daily (Calendar) note entries with a `[[Note title]]` in it to the mentioned note, **filing** them directly after the header section. In more detail:
-- where the line is a task, it moves the task and any following indented lines (optionally terminated by a blank line)
 - where the line is a heading, it moves the heading and all following lines until a blank line, or the next heading of the same level
+- where the line isn't a heading, it moves the line and any following indented lines (optionally terminated by a blank line)
 - where the note for a  `[[Note link]]` doesn't exist, it is created in the top-level Notes folder first
-- This feature can be turned off using the `-n` option.
+- if there is a `>YYYY-MM-DD` date specified in the line already, then carry that over, otherwise  add today's date
 
-NB: This only operates from Daily (Calendar) notes; it therefore doesn't interfere with **linking and backlinking** between main notes.
+This feature can be turned off using the `-n` option.  NB: This only operates from Daily (Calendar) notes; it therefore doesn't interfere with **linking and backlinking** between main notes.
 
 Changes any mentions of **date offset patterns** (e.g. `{-10d}`, `{+2w}`, `{-3m}` to being scheduled dates (e.g. `>2020-02-27`), if it can find a DD-MM-YYYY date pattern in the previous markdown heading or previous main task if it has sub-tasks. This allows for users to define simple **templates** and copy and paste them into the note, set the due date at the start, and the other dates are then worked out for you.
 - Valid intervals are specified as `[+][0-9][bdwmqy]`. This allows for `b`usiness days,  `d`ays, `w`eeks, `m`onths, `q`uarters or `y`ears. (Business days skip weekends. If the existing date happens to be on a weekend, it's treated as being the next working day.)
@@ -40,11 +40,11 @@ Changes any mentions of **date offset patterns** (e.g. `{-10d}`, `{+2w}`, `{-3m}
 ## Running the Tools
 There are 2 ways of running the script:
 1. with no arguments (`ruby npTools.rb`), it checks all files updated in the last 24 hours. This is the way to use it automatically, running one or more times each day. (This is configurable by HOURS_TO_PROCESS below.)
-2. with passed filename pattern(s), where it works on any matching Calendar or Note files. For example, to match the Daily file from 24/3/2020 give `ruby npTools.rb 20200324.txt`. It can include wildcard *patterns* to match multiple files, for example `202003*.txt` to process all Daily files from March 2020. If no `.` is found in the pattern, the pattern matches all files as `*pattern*.*`.
+2. with passed filename pattern(s), where it works on any matching Calendar or Note files. For example, to match the Daily file from 24/3/2020 use `ruby npTools.rb 20200324.txt`. It can include wildcard *patterns* to match multiple files, for example `202003*.txt` to process all Daily files from March 2020. If no `.` is found in the pattern, the pattern matches all files as `*pattern*.*`.
 
-You can also specify options:
+You can also specify **options**:
 - `-h` for help, 
-- `-a` (`--noarchive`) don't archive completed tasks into the `# Done` section
+- `-a` (`--noarchive`) don't archive completed tasks into the `# Done` section. _This is currently on by default, as the feature isn't yet complete to my satisfaction._
 - `-n` (`--nomove`) turn off moving mentions of [[Note]] in a daily calendar day file to the [[Note]]. You'll want to do this if you're using the [[...]] notation for backlinks (from NP v3.0.15 onwards)
 - `-s` (`--keepschedules`) keep the scheduled (>) dates of completed tasks
 - `-f` (`--skipfile=NOTETITLE[,NOTETITLE2,etc]`) don't process specific note(s)
