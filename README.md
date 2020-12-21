@@ -34,18 +34,19 @@ Changes any mentions of **date offset patterns** (e.g. `{-10d}`, `{+2w}`, `{-3m}
 - If no finish time is set, then the event defaults to an hour.
 - If am/AM or pm/PM isn't specified, then the hours given are assumed to be in 24-hour clock
 - Currently no description or location is given for the event.
-- Under the hood this uses AppleScript, and takes a few seconds per event.  Once it has run succesfully the `#create_event` is changed to `#event_created` so that it won't be triggered again.
+- Under the hood this uses AppleScript, and takes a few seconds per event.  Once it has run succesfully the `#create_event` is changed to `#event_created` so that it won't be triggered again.  
+- There are some settings that need to be configured for this: see Installation and Configuration below.
 
 For example to create a meeting event:
 ```
-### Project X Meeting #createevent at 10-11am
+### Project X Meeting #create_event at 10-11am
 ```
 
 For example to create a meeting event, and a timed task to do some associated tasks 5 days before it, and the following morning:
 ```
-### Project X Meeting #createevent 10-11am
-* write and circulate agenda {-5d} #createevent at 4pm
-* send out actions {1d} #createevent at 9:00
+### Project X Meeting #create_event 10-11am
+* write and circulate agenda {-5d} #create_event at 4pm
+* send out actions {1d} #create_event at 9:00
 ```
 
 **Creates new repeats** for newly completed tasks that include a `@repeat(interval)`, on the appropriate future date.
