@@ -1,5 +1,8 @@
 # CHANGELOG
 
+## v1.8.0. 21.12.2020
+- [New] Add ability to create events in the Calendar, based on time-blocking syntax. See README for more details. [Issue 36]
+
 ## v1.7.4. 19.12.2020
 - [Improve] Clarify documentation to show all sorts of lines in daily notes are moved to the mentioned [[note title]], not just task or header lines. Also loosened unnecessarily strict regexes used here.
 

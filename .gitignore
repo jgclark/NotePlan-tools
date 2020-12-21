@@ -51,3 +51,4 @@ build-iPhoneSimulator/
 .solargraph.yml
 .vscode/settings.json
 .vscode/launch.json
+*.code-workspace

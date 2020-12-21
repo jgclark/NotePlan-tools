@@ -1,5 +1,5 @@
 # NotePlan Tools
-`npTools.rb` is a Ruby script that adds functionality to the [NotePlan app](https://noteplan.co/). Particularly when run frequently, this provides a more flexible system for repeating tasks, allows for due dates to be expressed as offsets which allows for templates, and moves or files items from Daily files to Note files. It incorporates an earlier script to 'clean' or tidy up NotePlan's data files.
+`npTools.rb` is a Ruby script that adds functionality to the [NotePlan app](https://noteplan.co/). Particularly when run frequently, this provides a more flexible system for repeating tasks, allows for due dates to be expressed as offsets which allows for templates, moves items from Daily files to Note files, and creates events. It incorporates an earlier script to 'clean' or tidy up NotePlan's data files.
 
 Each time the script runs, it does a number of things:
 
@@ -30,10 +30,29 @@ Changes any mentions of **date offset patterns** (e.g. `{-10d}`, `{+2w}`, `{-3m}
 | \#\#\# Christmas Cards 25/12/2020<br />\* Write cards {-20d}<br />\* Post overseas cards {-15d}<br />\* Post cards to this country {-10d}<br />\* Store spare cards for next year {+3d} | \#\#\# Christmas Cards 25/12/2020<br />\* Write cards >2020-12-05<br />\* Post overseas cards >2020-12-10<br />* Post cards to this country >2020-12-15<br />\* Store spare cards for next year >2020-12-28 |
 | \* Bob's birthday on 14/09/2020<br />&nbsp;&nbsp;\* Find present {-6d}<br />&nbsp;&nbsp;\* Wrap & post present {-3d} <br />&nbsp;&nbsp;\* Call Bob {0d}                                 | \* Bob's birthday on 14/09/2020<br />&nbsp;&nbsp;\* Find present >2020-09-08<br />&nbsp;&nbsp;\* Wrap & post present >2020-09-11<br />&nbsp;&nbsp;\* Call Bob >2020-09-14                                   |
 
+**Creates new events** in Apple Calendar, when the `#createevent` tag is used on a line (task, comment or heading) with a timeblocking command (either `at 8[-11][AM|PM]` or `3:00[-4:00][AM|PM]`). This allows for meeting events to be listed on a day, and also created in the calendar. In combination with the date offset patterns above, it further allows scheduling preparation time days or hours before events.  Please note:
+- If no finish time is set, then the event defaults to an hour.
+- If am/AM or pm/PM isn't specified, then the hours given are assumed to be in 24-hour clock
+- Currently no description or location is given for the event.
+- Under the hood this uses AppleScript, and takes a few seconds per event.  Once it has run succesfully the `#create_event` is changed to `#event_created` so that it won't be triggered again.
+
+For example to create a meeting event:
+```
+### Project X Meeting #createevent at 10-11am
+```
+
+For example to create a meeting event, and a timed task to do some associated tasks 5 days before it, and the following morning:
+```
+### Project X Meeting #createevent 10-11am
+* write and circulate agenda {-5d} #createevent at 4pm
+* send out actions {1d} #createevent at 9:00
+```
+
 **Creates new repeats** for newly completed tasks that include a `@repeat(interval)`, on the appropriate future date.
 - Valid intervals are specified as `[+][0-9][dwmqy]`. This allows for `d`ays, `w`eeks, `m`onths, `q`uarters or `y`ears.
 - When _interval_ is of the form `+2w` it will duplicate the task for 2 weeks after the date the _task was completed_.
 - When _interval_ is of the form `2w` it will duplicate the task for 2 weeks after the date the _task was last due_. If this can't be determined, then it defaults to the first option.
+
 
 <!-- In future, extending the **archiving** system. -->
 
@@ -66,9 +85,13 @@ It works with all 3 storage options for storing NotePlan data: CloudKit (the def
 - `NUM_HEADER_LINES`: number of lines at the start of a note file to regard as the header. The default is 1. Relevant when moving lines around.
 - `TAGS_TO_REMOVE`: list of tags to remove. Default ["#waiting","#high"]
 - `DATE_TIME_LOG_FORMAT`: date string format to use in logs
+- `DATE_TIME_APPLESCRIPT_FORMAT`: date string format to use in AppleScript for event creation -- depends on various locale settings
+- `DATE_TIME_LOG_FORMAT`: name of Calendar to create any new events in
 - for completeness, `NP_BASE_DIR` automatically works out where NotePlan data files are located. (If there are multiple isntallations it selects using the priority CloudKit > iCloudDrive > DropBox.)
 <!-- - `DATE_OFFSET_FORMAT`: date string format to use in date offset patterns -->
-6. Then run `ruby npTools.rb [-options]`
+1. Then run `ruby npTools.rb [-options]`
+
+The first time you attempt to `#createevent`, macOS (at least Catalina and Big Sur) will ask for permission to update your Calendar).
 
 ### Automatic running
 If you wish to run this automatically in the background on macOS, you can do this using the built-in `launchctl` system. Here's the configuration file `jgc.npTools.plist` that I use to automatically run `npTools.rb` several times a day:

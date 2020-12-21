@@ -1,12 +1,12 @@
 #!/usr/bin/ruby
 #-------------------------------------------------------------------------------
 # NotePlan Tools script
-# by Jonathan Clark, v1.7.4, 19.12.2020
+# by Jonathan Clark, v1.8.0, 21.12.2020
 #-------------------------------------------------------------------------------
 # See README.md file for details, how to run and configure it.
 # Repository: https://github.com/jgclark/NotePlan-tools/
 #-------------------------------------------------------------------------------
-VERSION = '1.7.4'.freeze
+VERSION = '1.8.0'.freeze
 
 require 'date'
 require 'time'
@@ -23,6 +23,8 @@ TAGS_TO_REMOVE = ['#waiting', '#high'].freeze # simple array of strings
 DATE_TIME_LOG_FORMAT = '%e %b %Y %H:%M'.freeze # only used in logging
 DATE_OFFSET_FORMAT = '%e-%b-%Y'.freeze # TODO: format used to find date to use in offsets
 DATE_TODAY_FORMAT = '%Y%m%d'.freeze # using this to identify the "today" daily note
+DATE_TIME_APPLESCRIPT_FORMAT = '%e %b %Y %H:%M:%S'.freeze # only used when creating Calendar events (via AppleScript)
+CALENDAR_TO_USE = 'Jonathan (iCloud)' # Calendar name to create new events in (if required)
 
 #-------------------------------------------------------------------------------
 # Other Constants & Settings
@@ -55,7 +57,7 @@ $archive = 0
 $remove_scheduled = 1
 $allNotes = []  # to hold all note objects
 $notes    = []  # to hold all relevant note objects
-$time_today = time_now.strftime(DATE_TODAY_FORMAT)
+$date_today = time_now.strftime(DATE_TODAY_FORMAT)
 $npfile_count = -1 # number of NPFile objects created so far (incremented before first use)
 
 #-------------------------------------------------------------------------
@@ -130,6 +132,12 @@ def create_new_empty_file(title, ext)
   puts "Added new note id #{new_note_id} with title '#{title}' and filename '#{filename}'. New $allNotes count = #{$allNotes.count}" if $verbose > 1
 end
 
+def osascript(script)
+  # Run applescript
+  # from gist https://gist.github.com/dinge/6983008
+  system 'osascript', *script.split(/\n/).map { |line| ['-e', line] }.flatten
+end
+
 #-------------------------------------------------------------------------
 # Class definition: NPFile
 # NOTE: in this script this class covers Note *and* Daily files
@@ -185,7 +193,7 @@ class NPFile
       # for Calendar file, use the date from filename
       @title = @filename[0..7]
       @is_calendar = true
-      @is_today = @title == $time_today
+      @is_today = @title == $date_today
     else
       # otherwise use first line (but take off heading characters at the start and starting and ending whitespace)
       tempTitle = @lines[0].gsub(/^#+\s*/, '')
@@ -203,6 +211,113 @@ class NPFile
   #   object.create_new_empty_file(*args)
   #   object # implicit return
   # end
+
+  def create_events_from_timeblocks
+    # Create calendar event in default calendar from an NP timeblock given in
+    # a daily note, where #create_event is specified.
+    # (As of NP 3.0 time blocking only works in headers and tasks, but Eduard has
+    # said he will add to bullets as well, so I'm doing that already.)
+    # Examples:
+    #   '* Write proposal at 12-14 #create_event' --> caledar event 12-2pm
+    #   '### Write proposal >2020-12-20 at 2pm #create_event' --> caledar event 2pm for 1 hour on that date
+    #   '- clear before meeting 2:00-2:30pm #create_event' --> caledar event 2-2:30pm
+    puts '  create_events_from_timeblocks ...' if $verbose > 1
+    n = 0
+    while n < @line_count
+      this_line = @lines[n]
+      unless this_line =~ /#create_event/
+        n += 1
+        next
+      end
+      # we have a line with one or more events to create
+      # get date: if there's a >YYYY-MM-DD mentioned in the line, use that, 
+      # otherwise use date of calendar note. Format: YYYYMMDD
+      event_date_s = ''
+      if this_line =~ />\d{4}-\d{2}-\d{2}/
+        this_line.scan(/>(\d{4}-\d{2}-\d{2})/) { |m| event_date_s = m.join.tr('-', '') }
+        puts "    - found event creation date spec: #{event_date_s}" if $verbose > 1
+      elsif @is_calendar
+        event_date_s = @filename[0..7]
+      else
+        event_date_s = $date_today
+      end
+      # make title: strip off #create_event, time strings and header/task/bullet punctuation
+      event_title = this_line.chomp
+      event_title.gsub!(/ #create_event/, '')
+      event_title.gsub!(/^\s*[->]\s+/, '')
+      event_title.gsub!(/^\s*\*\s(\[.\])?\s*/, '')
+      event_title.gsub!(/^#+\s*/, '')
+      event_title.gsub!(/ at \d\d?(-\d\d?)?(am|pm)?/, '')
+      event_title.gsub!(/ \d\d?:\d\d(-\d\d?:\d\d)?(am|pm)?/, '')
+      event_title.gsub!(/>\d{4}\-\d{2}\-\d{2}/, '')
+
+      # get times for event.
+      # if no end time given, default to a 1-hour duration event
+      start_mins = end_mins = start_hour = end_hour = 0
+      event_time_s = ''
+      time_parts = []
+      if this_line =~ / at \d\d?(am|pm)?[\s$]/i
+        # times of form 'at 11[am|pm]' (case insensitive)
+        time_parts_da = this_line.scan(/ at (\d\d?)(am|pm)?\D/i) # returns array of groups in time_parts[0] *not* time_parts
+        time_parts = time_parts_da[0]
+        start_hour = !time_parts[1].nil? && time_parts[1] =~ /pm/i ? time_parts[0].to_i + 12 : time_parts[0].to_i
+        end_hour = start_hour + 1
+      elsif this_line =~ / at \d\d?-\d\d?(am|pm)?[\s$]/i
+      # times of form 'at 9-11[am|pm]' (case insensitive)
+        time_parts_da = this_line.scan(/ at (\d\d?)-(\d\d?)(am|pm)?\D/i)
+        time_parts = time_parts_da[0]
+        start_hour = !time_parts[2].nil? && time_parts[2] =~ /pm/i ? time_parts[0].to_i + 12 : time_parts[0].to_i
+        end_hour = !time_parts[2].nil? && time_parts[2] =~ /pm/i ? time_parts[1].to_i + 12 : time_parts[1].to_i
+      elsif this_line =~ /[^\d-]\d\d?:\d\d(am|pm)?[\s$]/i
+        # times of form '3:00[am|pm]'
+        time_parts_da = this_line.scan(/[^\d-](\d\d?):(\d\d)(am|pm)?[\s$]/i)
+        time_parts = time_parts_da[0]
+        start_hour = time_parts[2] =~ /pm/i ? time_parts[0].to_i + 12 : time_parts[0].to_i
+        start_mins = time_parts[1].to_i
+        end_hour = start_hour + 1 # if no end part given, default to a 1-hour duration event
+        end_mins = start_mins
+      elsif this_line =~ /[^\d-]\d\d?:\d\d-\d\d?:\d\d(am|pm)?[\s$]/i
+        # times of form '3:00-4:00[am|pm]'
+        time_parts_da = this_line.scan(/[^\d-](\d\d?):(\d\d)-(\d\d?):(\d\d)(am|pm)?[\s$]/i)
+        time_parts = time_parts_da[0]
+        start_hour = time_parts[4] =~ /pm/i ? time_parts[0].to_i + 12 : time_parts[0].to_i
+        start_mins = time_parts[1].to_i
+        end_hour = time_parts[4] =~ /pm/i ? time_parts[2].to_i + 12 : time_parts[2].to_i
+        end_mins = time_parts[3].to_i
+      else
+        # warn as can't find suitable time String
+        puts "  - want to create '#{event_title}' event through #createevent, but cannot find suitable  time spec".colorize(WarningColour)
+        n += 1
+        next
+      end
+      # create start and end datetime formats to use in applescript
+      start_dt = DateTime.new(event_date_s[0..3].to_i, event_date_s[4..5].to_i, event_date_s[6..7].to_i,start_hour,start_mins,0)
+      end_dt   = DateTime.new(event_date_s[0..3].to_i, event_date_s[4..5].to_i, event_date_s[6..7].to_i,end_hour,end_mins,0)
+      start_dt_s = start_dt.strftime(DATE_TIME_APPLESCRIPT_FORMAT)
+      end_dt_s   = end_dt.strftime(DATE_TIME_APPLESCRIPT_FORMAT)
+      puts "  - want to create '#{event_title}' from #{start_dt_s} to #{end_dt_s}" if $verbose > 0
+      puts "    (time_parts:#{time_parts})" if $verbose > 1
+osascript <<-END
+set calendarName to "#{CALENDAR_TO_USE}"
+set theSummary to "#{event_title}"
+set theDescrption to ""
+set theLocation to ""
+set startDate to "#{start_dt_s}"
+set endDate to "#{end_dt_s}"
+set startDate to date startDate
+set endDate to date endDate
+tell application "Calendar"
+	tell (first calendar whose name is calendarName)
+		make new event at end of events with properties {summary:theSummary, start date:startDate, end date:endDate, description:theDescrption, location:theLocation}
+	end tell
+end tell
+END
+      # Now update the line to show #event_created not #createevent
+      @lines[n].gsub!('#create_event','#event_created')
+      @is_updated = true
+      n += 1
+    end
+  end
 
   def clear_empty_tasks_or_headers
     # Clean up lines with just * or - or #s in them
@@ -669,7 +784,7 @@ class NPFile
       updated_line = ''
       completed_date = ''
       # find lines with date-time to shorten, and capture date part of it
-      # i.e. @done(YYYY-MM-DD HH:MM)
+      # i.e. @done(YYYY-MM-DD HH:MM[AM|PM])
       if line =~ /@done\(\d{4}\-\d{2}\-\d{2} \d{2}:\d{2}(?:.(?:AM|PM))?\)/
         # get completed date
         line.scan(/\((\d{4}\-\d{2}\-\d{2}) \d{2}:\d{2}(?:.(?:AM|PM))?\)/) { |m| completed_date = m.join }
@@ -958,7 +1073,7 @@ if $notes.count.positive? # if we have some files to work on ...
       puts 'Skipping ' + note.title.to_s.bold + ' due to --skipfile option' if $verbose > 0
       next
     end
-    puts "Cleaning file id #{note.id} " + note.title.to_s.bold if $verbose > 0
+    puts "Processing file " + note.title.to_s.bold + " (id #{note.id})" if $verbose > 0
     note.clear_empty_tasks_or_headers
     note.remove_empty_header_sections
     note.remove_unwanted_tags_dates
@@ -967,6 +1082,7 @@ if $notes.count.positive? # if we have some files to work on ...
     note.remove_multiple_empty_lines
     note.move_daily_ref_to_notes if note.is_calendar && options[:move] == 1
     note.use_template_dates unless note.is_calendar
+    note.create_events_from_timeblocks
     note.archive_lines if $archive == 1
     # If there have been changes, write out the file
     note.rewrite_file if note.is_updated
