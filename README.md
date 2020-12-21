@@ -42,9 +42,9 @@ For example to create a meeting event:
 ### Project X Meeting #create_event at 10-11am
 ```
 
-For example to create a meeting event, and a timed task to do some associated tasks 5 days before it, and the following morning:
+To extend this and use the date templates, add a timed task with calendar entry to do some associated tasks 5 days before it, and the following morning:
 ```
-### Project X Meeting #create_event 10-11am
+### Project X Meeting 21-12-2020 #create_event 10-11am
 * write and circulate agenda {-5d} #create_event at 4pm
 * send out actions {1d} #create_event at 9:00
 ```
