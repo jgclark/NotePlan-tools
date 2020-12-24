@@ -1,5 +1,8 @@
 # CHANGELOG
 
+## v1.8.1. 23.12.2020
+- [Improve] Can now add location to created events, and copies any description from following indented lines. [Issue 36]
+
 ## v1.8.0. 21.12.2020
 - [New] Add ability to create events in the Calendar, based on time-blocking syntax. See README for more details. [Issue 36]
 

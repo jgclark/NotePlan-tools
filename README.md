@@ -30,23 +30,24 @@ Changes any mentions of **date offset patterns** (e.g. `{-10d}`, `{+2w}`, `{-3m}
 | \#\#\# Christmas Cards 25/12/2020<br />\* Write cards {-20d}<br />\* Post overseas cards {-15d}<br />\* Post cards to this country {-10d}<br />\* Store spare cards for next year {+3d} | \#\#\# Christmas Cards 25/12/2020<br />\* Write cards >2020-12-05<br />\* Post overseas cards >2020-12-10<br />* Post cards to this country >2020-12-15<br />\* Store spare cards for next year >2020-12-28 |
 | \* Bob's birthday on 14/09/2020<br />&nbsp;&nbsp;\* Find present {-6d}<br />&nbsp;&nbsp;\* Wrap & post present {-3d} <br />&nbsp;&nbsp;\* Call Bob {0d}                                 | \* Bob's birthday on 14/09/2020<br />&nbsp;&nbsp;\* Find present >2020-09-08<br />&nbsp;&nbsp;\* Wrap & post present >2020-09-11<br />&nbsp;&nbsp;\* Call Bob >2020-09-14                                   |
 
-**Creates new events** in Apple Calendar, when the `#createevent` tag is used on a line (task, comment or heading) with a timeblocking command (either `at 8[-11][AM|PM]` or `3:00[-4:00][AM|PM]`). This allows for meeting events to be listed on a day, and also created in the calendar. In combination with the date offset patterns above, it further allows scheduling preparation time days or hours before events.  Please note:
+**Creates new events** in Apple Calendar, when the `#createevent` tag is used on a line (task, comment or heading) with a timeblocking command such as `3:00[-4:00][AM|PM]`) and location such as `at Jim's`. This allows for meeting events to be listed on a day, and also created in the calendar. In combination with the date offset patterns above, it further allows scheduling preparation time days or hours before events.  Please note:
 - If no finish time is set, then the event defaults to an hour.
 - If am/AM or pm/PM isn't specified, then the hours given are assumed to be in 24-hour clock
-- Currently no description or location is given for the event.
+- It's best to put any `at place` location at the end of the line, as there's no easy way of telling how a location finishes, so it will use the rest of the line.
+- Any indented following lines are copied to the event description, with leading whitespace removed.
 - Under the hood this uses AppleScript, and takes a few seconds per event.  Once it has run succesfully the `#create_event` is changed to `#event_created` so that it won't be triggered again.  
 - There are some settings that need to be configured for this: see Installation and Configuration below.
 
 For example to create a meeting event:
 ```
-### Project X Meeting #create_event at 10-11am
+### Project X Meeting #create_event 10:00am at Jim's
 ```
 
 To extend this and use the date templates, add a timed task with calendar entry to do some associated tasks 5 days before it, and the following morning:
 ```
-### Project X Meeting 21-12-2020 #create_event 10-11am
-* write and circulate agenda {-5d} #create_event at 4pm
-* send out actions {1d} #create_event at 9:00
+### Project X Meeting 21-12-2020 #create_event 10:00am at Jim's
+* write and circulate agenda {-5d} #create_event 4pm
+* send out actions {1d} #create_event 9:00
 ```
 
 **Creates new repeats** for newly completed tasks that include a `@repeat(interval)`, on the appropriate future date.
@@ -87,12 +88,13 @@ It works with all 3 storage options for storing NotePlan data: CloudKit (the def
 - `TAGS_TO_REMOVE`: list of tags to remove. Default ["#waiting","#high"]
 - `DATE_TIME_LOG_FORMAT`: date string format to use in logs
 - `DATE_TIME_APPLESCRIPT_FORMAT`: date string format to use in AppleScript for event creation -- depends on various locale settings
-- `DATE_TIME_LOG_FORMAT`: name of Calendar to create any new events in
+- `CALENDAR_APP_TO_USE`: name of Calendar app to use in create_event AppleScript. Default is 'Calendar'. Can ignore if not using this for event creation.
+- `CALENDAR_NAME_TO_USE`: name of Calendar to create any new events in. Can ignore if not using this for event creation.
 - for completeness, `NP_BASE_DIR` automatically works out where NotePlan data files are located. (If there are multiple isntallations it selects using the priority CloudKit > iCloudDrive > DropBox.)
 <!-- - `DATE_OFFSET_FORMAT`: date string format to use in date offset patterns -->
 1. Then run `ruby npTools.rb [-options]`
 
-The first time you attempt to `#createevent`, macOS (at least Catalina and Big Sur) will ask for permission to update your Calendar).
+The first time you attempt to `#create_event`, macOS (at least Catalina and Big Sur) will probably ask for permission to update your Calendar.
 
 ### Automatic running
 If you wish to run this automatically in the background on macOS, you can do this using the built-in `launchctl` system. Here's the configuration file `jgc.npTools.plist` that I use to automatically run `npTools.rb` several times a day:

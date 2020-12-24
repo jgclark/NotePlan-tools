@@ -1,12 +1,12 @@
 #!/usr/bin/ruby
 #-------------------------------------------------------------------------------
 # NotePlan Tools script
-# by Jonathan Clark, v1.8.0, 21.12.2020
+# by Jonathan Clark, v1.8.1, 23.12.2020
 #-------------------------------------------------------------------------------
 # See README.md file for details, how to run and configure it.
 # Repository: https://github.com/jgclark/NotePlan-tools/
 #-------------------------------------------------------------------------------
-VERSION = '1.8.0'.freeze
+VERSION = '1.8.1'.freeze
 
 require 'date'
 require 'time'
@@ -24,7 +24,8 @@ DATE_TIME_LOG_FORMAT = '%e %b %Y %H:%M'.freeze # only used in logging
 DATE_OFFSET_FORMAT = '%e-%b-%Y'.freeze # TODO: format used to find date to use in offsets
 DATE_TODAY_FORMAT = '%Y%m%d'.freeze # using this to identify the "today" daily note
 DATE_TIME_APPLESCRIPT_FORMAT = '%e %b %Y %H:%M:%S'.freeze # only used when creating Calendar events (via AppleScript)
-CALENDAR_TO_USE = 'Jonathan (iCloud)' # Calendar name to create new events in (if required)
+CALENDAR_APP_TO_USE = 'Calendar' # Name of Calendar app to use in create_event AppleScript. Default is 'Calendar'.
+CALENDAR_NAME_TO_USE = 'Jonathan (iCloud)' # Apple (iCal) Calendar name to create new events in (if required)
 
 #-------------------------------------------------------------------------------
 # Other Constants & Settings
@@ -135,6 +136,7 @@ end
 def osascript(script)
   # Run applescript
   # from gist https://gist.github.com/dinge/6983008
+  puts "About to execute this AppleScript:\n#{script}\n" if $verbose > 1
   system 'osascript', *script.split(/\n/).map { |line| ['-e', line] }.flatten
 end
 
@@ -187,7 +189,6 @@ class NPFile
     end
     f.close
     @line_count = @lines.size
-
     # Now make a title for this file:
     if @filename =~ /\d{8}\.(txt|md)/
       # for Calendar file, use the date from filename
@@ -241,7 +242,7 @@ class NPFile
       else
         event_date_s = $date_today
       end
-      # make title: strip off #create_event, time strings and header/task/bullet punctuation
+      # make title: strip off #create_event, time strings, header/task/bullet punctuation, and any location info
       event_title = this_line.chomp
       event_title.gsub!(/ #create_event/, '')
       event_title.gsub!(/^\s*[->]\s+/, '')
@@ -250,25 +251,26 @@ class NPFile
       event_title.gsub!(/ at \d\d?(-\d\d?)?(am|pm)?/, '')
       event_title.gsub!(/ \d\d?:\d\d(-\d\d?:\d\d)?(am|pm)?/, '')
       event_title.gsub!(/>\d{4}\-\d{2}\-\d{2}/, '')
+      event_title.gsub!(/\sat\s.*$/, '')
 
       # get times for event.
       # if no end time given, default to a 1-hour duration event
       start_mins = end_mins = start_hour = end_hour = 0
       event_time_s = ''
       time_parts = []
-      if this_line =~ / at \d\d?(am|pm)?[\s$]/i
-        # times of form 'at 11[am|pm]' (case insensitive)
-        time_parts_da = this_line.scan(/ at (\d\d?)(am|pm)?\D/i) # returns array of groups in time_parts[0] *not* time_parts
-        time_parts = time_parts_da[0]
-        start_hour = !time_parts[1].nil? && time_parts[1] =~ /pm/i ? time_parts[0].to_i + 12 : time_parts[0].to_i
-        end_hour = start_hour + 1
-      elsif this_line =~ / at \d\d?-\d\d?(am|pm)?[\s$]/i
-      # times of form 'at 9-11[am|pm]' (case insensitive)
-        time_parts_da = this_line.scan(/ at (\d\d?)-(\d\d?)(am|pm)?\D/i)
-        time_parts = time_parts_da[0]
-        start_hour = !time_parts[2].nil? && time_parts[2] =~ /pm/i ? time_parts[0].to_i + 12 : time_parts[0].to_i
-        end_hour = !time_parts[2].nil? && time_parts[2] =~ /pm/i ? time_parts[1].to_i + 12 : time_parts[1].to_i
-      elsif this_line =~ /[^\d-]\d\d?:\d\d(am|pm)?[\s$]/i
+      # if this_line =~ / at \d\d?(am|pm)?[\s$]/i
+      #   # times of form 'at 11[am|pm]' (case insensitive)
+      #   time_parts_da = this_line.scan(/ at (\d\d?)(am|pm)?\D/i) # returns array of groups in time_parts[0] *not* time_parts
+      #   time_parts = time_parts_da[0]
+      #   start_hour = !time_parts[1].nil? && time_parts[1] =~ /pm/i ? time_parts[0].to_i + 12 : time_parts[0].to_i
+      #   end_hour = start_hour + 1
+      # elsif this_line =~ / at \d\d?-\d\d?(am|pm)?[\s$]/i
+      # # times of form 'at 9-11[am|pm]' (case insensitive)
+      #   time_parts_da = this_line.scan(/ at (\d\d?)-(\d\d?)(am|pm)?\D/i)
+      #   time_parts = time_parts_da[0]
+      #   start_hour = !time_parts[2].nil? && time_parts[2] =~ /pm/i ? time_parts[0].to_i + 12 : time_parts[0].to_i
+      #   end_hour = !time_parts[2].nil? && time_parts[2] =~ /pm/i ? time_parts[1].to_i + 12 : time_parts[1].to_i
+      if this_line =~ /[^\d-]\d\d?:\d\d(am|pm)?[\s$]/i
         # times of form '3:00[am|pm]'
         time_parts_da = this_line.scan(/[^\d-](\d\d?):(\d\d)(am|pm)?[\s$]/i)
         time_parts = time_parts_da[0]
@@ -286,7 +288,7 @@ class NPFile
         end_mins = time_parts[3].to_i
       else
         # warn as can't find suitable time String
-        puts "  - want to create '#{event_title}' event through #createevent, but cannot find suitable  time spec".colorize(WarningColour)
+        puts "  - want to create '#{event_title}' event through #create_event, but cannot find suitable time spec".colorize(WarningColour)
         n += 1
         next
       end
@@ -295,27 +297,58 @@ class NPFile
       end_dt   = DateTime.new(event_date_s[0..3].to_i, event_date_s[4..5].to_i, event_date_s[6..7].to_i,end_hour,end_mins,0)
       start_dt_s = start_dt.strftime(DATE_TIME_APPLESCRIPT_FORMAT)
       end_dt_s   = end_dt.strftime(DATE_TIME_APPLESCRIPT_FORMAT)
-      puts "  - want to create '#{event_title}' from #{start_dt_s} to #{end_dt_s}" if $verbose > 0
+      puts "  - will create '#{event_title}' from #{start_dt_s} to #{end_dt_s}" if $verbose > 0
       puts "    (time_parts:#{time_parts})" if $verbose > 1
+
+      # use ' at X...' to set the_location (rather than that type of timeblocking)
+      the_location = this_line =~ /\sat\s.*/ ? this_line.scan(/\sat\s(.*)/).join : ''
+
+      # Copy any indented comments/notes into the_description field
+      the_description = ''
+      # Incrementally add lines until we find ones at the same or lower level of indent.
+      # (similar to code from move_daily_ref_to_notes)
+      line_indent = ''
+      this_line.scan(/^(\s*)\*/) { |m| line_indent = m.join }
+      puts "    - building event description with starting indent of #{line_indent.length}" if $verbose > 1
+      nn = n + 1
+puts nn, @line_count if $verbose > 1
+      while nn < @line_count
+        line_to_check = @lines[nn]
+        # What's the indent of this line?
+        line_to_check_indent = ''
+        line_to_check.scan(/^(\s*)\S/) { |m| line_to_check_indent = m.join }
+        break if line_indent.length >= line_to_check_indent.length
+
+        the_description += line_to_check.lstrip # add this line to the description, with leading whitespace removed
+        nn += 1
+      end
+
+      # Now write the AppleScript and run it
+      begin
 osascript <<-END
-set calendarName to "#{CALENDAR_TO_USE}"
+set calendarName to "#{CALENDAR_NAME_TO_USE}"
 set theSummary to "#{event_title}"
-set theDescrption to ""
-set theLocation to ""
+set theDescrption to "#{the_description}"
+set theLocation to "#{the_location}"
 set startDate to "#{start_dt_s}"
 set endDate to "#{end_dt_s}"
 set startDate to date startDate
 set endDate to date endDate
+launch application "#{CALENDAR_APP_TO_USE}" # hoped this would start it without a window, but not so
+delay 2 # pause for 2 seconds while app launches
 tell application "Calendar"
 	tell (first calendar whose name is calendarName)
 		make new event at end of events with properties {summary:theSummary, start date:startDate, end date:endDate, description:theDescrption, location:theLocation}
 	end tell
 end tell
 END
-      # Now update the line to show #event_created not #createevent
-      @lines[n].gsub!('#create_event','#event_created')
-      @is_updated = true
-      n += 1
+        # Now update the line to show #event_created not #createevent
+        @lines[n].gsub!('#create_event','#event_created')
+        @is_updated = true
+        n += 1
+      rescue StandardError => e
+        puts "ERROR: #{e.exception.message} when calling AppleScript to create an event".colorize(WarningColour)
+      end      
     end
   end
 
@@ -510,7 +543,7 @@ END
         @line_count -= 1
         moved += 1
         puts "  - starting header analysis at line #{n + 1}" if $verbose > 1
-        # n += 1
+
         while n < @line_count
           line_to_check = @lines[n]
           puts "    - l_t_o checking '#{line_to_check}'" if $verbose > 1
@@ -967,8 +1000,6 @@ $quiet = options[:quiet]
 $verbose = $quiet ? 0 : options[:verbose] # if quiet, then verbose has to  be 0
 $archive = options[:archive]
 $remove_scheduled = options[:remove_scheduled]
-
-# n = 0 # number of notes and daily entries to work on
 
 #--------------------------------------------------------------------------------------
 # Start by reading all Notes files in
