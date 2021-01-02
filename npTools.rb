@@ -1,12 +1,12 @@
 #!/usr/bin/ruby
 #-------------------------------------------------------------------------------
 # NotePlan Tools script
-# by Jonathan Clark, v1.8.1, 23.12.2020
+# by Jonathan Clark, v1.8.2, 2.1.2021
 #-------------------------------------------------------------------------------
 # See README.md file for details, how to run and configure it.
 # Repository: https://github.com/jgclark/NotePlan-tools/
 #-------------------------------------------------------------------------------
-VERSION = '1.8.1'.freeze
+VERSION = "1.8.2"
 
 require 'date'
 require 'time'
@@ -26,6 +26,7 @@ DATE_TODAY_FORMAT = '%Y%m%d'.freeze # using this to identify the "today" daily n
 DATE_TIME_APPLESCRIPT_FORMAT = '%e %b %Y %H:%M:%S'.freeze # only used when creating Calendar events (via AppleScript)
 CALENDAR_APP_TO_USE = 'Calendar' # Name of Calendar app to use in create_event AppleScript. Default is 'Calendar'.
 CALENDAR_NAME_TO_USE = 'Jonathan (iCloud)' # Apple (iCal) Calendar name to create new events in (if required)
+CREATE_EVENT_TAG_TO_USE = '#create_event' # customise if you want a different tag
 
 #-------------------------------------------------------------------------------
 # Other Constants & Settings
@@ -79,10 +80,10 @@ def calc_offset_date(old_date, interval)
     # Method from Arjen at https://stackoverflow.com/questions/279296/adding-days-to-a-date-but-excluding-weekends
     # Avoids looping, and copes with negative intervals too
     current_day_of_week = old_date.strftime("%u").to_i  # = day of week with Monday = 0, .. Sunday = 6
-    dayOfWeek = num < 0 ? (current_day_of_week - 12).modulo(7) : (current_day_of_week + 6).modulo(7) 
+    dayOfWeek = num.negative? ? (current_day_of_week - 12).modulo(7) : (current_day_of_week + 6).modulo(7)
     num -= 1 if dayOfWeek == 6
     num += 1 if dayOfWeek == -6
-    days_to_add = num + ((num + dayOfWeek).div(5)) * 2
+    days_to_add = num + (num + dayOfWeek).div(5) * 2
   when 'd'
     days_to_add = num
   when 'w'
@@ -98,7 +99,7 @@ def calc_offset_date(old_date, interval)
   end
   puts "    c_o_d: with #{old_date} interval #{interval} found #{days_to_add} days_to_add" if $verbose > 1
   newDate = old_date + days_to_add
-  # implied return newDate
+  return newDate
 end
 
 def create_new_empty_file(title, ext)
@@ -226,12 +227,12 @@ class NPFile
     n = 0
     while n < @line_count
       this_line = @lines[n]
-      unless this_line =~ /#create_event/
+      unless this_line =~ /#{CREATE_EVENT_TAG_TO_USE}/
         n += 1
         next
       end
       # we have a line with one or more events to create
-      # get date: if there's a >YYYY-MM-DD mentioned in the line, use that, 
+      # get date: if there's a >YYYY-MM-DD mentioned in the line, use that,
       # otherwise use date of calendar note. Format: YYYYMMDD
       event_date_s = ''
       if this_line =~ />\d{4}-\d{2}-\d{2}/
@@ -244,19 +245,18 @@ class NPFile
       end
       # make title: strip off #create_event, time strings, header/task/bullet punctuation, and any location info
       event_title = this_line.chomp
-      event_title.gsub!(/ #create_event/, '')
+      event_title.gsub!(/ #{CREATE_EVENT_TAG_TO_USE}/, '')
       event_title.gsub!(/^\s*[->]\s+/, '')
       event_title.gsub!(/^\s*\*\s(\[.\])?\s*/, '')
       event_title.gsub!(/^#+\s*/, '')
-      event_title.gsub!(/ at \d\d?(-\d\d?)?(am|pm)?/, '')
-      event_title.gsub!(/ \d\d?:\d\d(-\d\d?:\d\d)?(am|pm)?/, '')
+      event_title.gsub!(/ at \d\d?(-\d\d?)?(am|pm|AM|PM)?/, '')
+      event_title.gsub!(/ \d\d?:\d\d(-\d\d?:\d\d)?(am|pm|AM|PM)?/, '')
       event_title.gsub!(/>\d{4}\-\d{2}\-\d{2}/, '')
       event_title.gsub!(/\sat\s.*$/, '')
 
       # get times for event.
       # if no end time given, default to a 1-hour duration event
       start_mins = end_mins = start_hour = end_hour = 0
-      event_time_s = ''
       time_parts = []
       # if this_line =~ / at \d\d?(am|pm)?[\s$]/i
       #   # times of form 'at 11[am|pm]' (case insensitive)
@@ -270,7 +270,7 @@ class NPFile
       #   time_parts = time_parts_da[0]
       #   start_hour = !time_parts[2].nil? && time_parts[2] =~ /pm/i ? time_parts[0].to_i + 12 : time_parts[0].to_i
       #   end_hour = !time_parts[2].nil? && time_parts[2] =~ /pm/i ? time_parts[1].to_i + 12 : time_parts[1].to_i
-      if this_line =~ /[^\d-]\d\d?:\d\d(am|pm)?[\s$]/i
+      if this_line =~ /[^\d-]\d\d?:\d\d(am|pm|AM|PM)?[\s$]/i
         # times of form '3:00[am|pm]'
         time_parts_da = this_line.scan(/[^\d-](\d\d?):(\d\d)(am|pm)?[\s$]/i)
         time_parts = time_parts_da[0]
@@ -293,8 +293,8 @@ class NPFile
         next
       end
       # create start and end datetime formats to use in applescript
-      start_dt = DateTime.new(event_date_s[0..3].to_i, event_date_s[4..5].to_i, event_date_s[6..7].to_i,start_hour,start_mins,0)
-      end_dt   = DateTime.new(event_date_s[0..3].to_i, event_date_s[4..5].to_i, event_date_s[6..7].to_i,end_hour,end_mins,0)
+      start_dt = DateTime.new(event_date_s[0..3].to_i, event_date_s[4..5].to_i, event_date_s[6..7].to_i, start_hour, start_mins, 0)
+      end_dt   = DateTime.new(event_date_s[0..3].to_i, event_date_s[4..5].to_i, event_date_s[6..7].to_i, end_hour, end_mins, 0)
       start_dt_s = start_dt.strftime(DATE_TIME_APPLESCRIPT_FORMAT)
       end_dt_s   = end_dt.strftime(DATE_TIME_APPLESCRIPT_FORMAT)
       puts "  - will create '#{event_title}' from #{start_dt_s} to #{end_dt_s}" if $verbose > 0
@@ -311,7 +311,6 @@ class NPFile
       this_line.scan(/^(\s*)\*/) { |m| line_indent = m.join }
       puts "    - building event description with starting indent of #{line_indent.length}" if $verbose > 1
       nn = n + 1
-puts nn, @line_count if $verbose > 1
       while nn < @line_count
         line_to_check = @lines[nn]
         # What's the indent of this line?
@@ -325,30 +324,32 @@ puts nn, @line_count if $verbose > 1
 
       # Now write the AppleScript and run it
       begin
-osascript <<-END
-set calendarName to "#{CALENDAR_NAME_TO_USE}"
-set theSummary to "#{event_title}"
-set theDescrption to "#{the_description}"
-set theLocation to "#{the_location}"
-set startDate to "#{start_dt_s}"
-set endDate to "#{end_dt_s}"
-set startDate to date startDate
-set endDate to date endDate
-launch application "#{CALENDAR_APP_TO_USE}" # hoped this would start it without a window, but not so
-delay 2 # pause for 2 seconds while app launches
-tell application "Calendar"
-	tell (first calendar whose name is calendarName)
-		make new event at end of events with properties {summary:theSummary, start date:startDate, end date:endDate, description:theDescrption, location:theLocation}
-	end tell
-end tell
-END
-        # Now update the line to show #event_created not #createevent
-        @lines[n].gsub!('#create_event','#event_created')
+        osascript <<-APPLESCRIPT
+          set calendarName to "#{CALENDAR_NAME_TO_USE}"
+          set theSummary to "#{event_title}"
+          set theDescrption to "#{the_description}"
+          set theLocation to "#{the_location}"
+          set startDate to "#{start_dt_s}"
+          set endDate to "#{end_dt_s}"
+          set startDate to date startDate
+          set endDate to date endDate
+          if application "#{CALENDAR_APP_TO_USE}" is not running then
+            launch application "#{CALENDAR_APP_TO_USE}" # hoped this would start it without a window, but not so
+            delay 3 # pause for 3 seconds while app launches
+          end if
+          tell application "Calendar"
+            tell (first calendar whose name is calendarName)
+              make new event at end of events with properties {summary:theSummary, start date:startDate, end date:endDate, description:theDescrption, location:theLocation}
+            end tell
+          end tell
+        APPLESCRIPT
+        # Now update the line to show #event_created not #create_event
+        @lines[n].gsub!(CREATE_EVENT_TAG_TO_USE, '#event_created')
         @is_updated = true
         n += 1
       rescue StandardError => e
         puts "ERROR: #{e.exception.message} when calling AppleScript to create an event".colorize(WarningColour)
-      end      
+      end
     end
   end
 

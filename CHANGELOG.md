@@ -1,5 +1,8 @@
 # CHANGELOG
 
+## v1.8.2. 2.1.2021
+- [Improve] Can now customise the `#create_event` tag used to trigger creating events. Also opens the selected Calendar app if needed first, and reduces the delay if not. [Issue 36]
+
 ## v1.8.1. 23.12.2020
 - [Improve] Can now add location to created events, and copies any description from following indented lines. [Issue 36]
 
