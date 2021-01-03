@@ -90,6 +90,7 @@ It works with all 3 storage options for storing NotePlan data: CloudKit (the def
 - `DATE_TIME_APPLESCRIPT_FORMAT`: date string format to use in AppleScript for event creation -- depends on various locale settings
 - `CALENDAR_APP_TO_USE`: name of Calendar app to use in create_event AppleScript. Default is 'Calendar'. Can ignore if not using this for event creation.
 - `CALENDAR_NAME_TO_USE`: name of Calendar to create any new events in. Can ignore if not using this for event creation.
+- `CREATE_EVENT_TAG_TO_USE`: name of tag to use to trigger creating events. Default is `#create_event`. Can ignore if not using this for event creation.
 - for completeness, `NP_BASE_DIR` automatically works out where NotePlan data files are located. (If there are multiple isntallations it selects using the priority CloudKit > iCloudDrive > DropBox.)
 <!-- - `DATE_OFFSET_FORMAT`: date string format to use in date offset patterns -->
 1. Then run `ruby npTools.rb [-options]`
