@@ -32,6 +32,7 @@ Changes any mentions of **date offset patterns** (e.g. `{-10d}`, `{+2w}`, `{-3m}
 
 **Creates new events** in Apple Calendar, when the `#createevent` tag is used on a line (task, comment or heading) with a timeblocking command such as `3:00[-4:00][AM|PM]`) and location such as `at Jim's`. This allows for meeting events to be listed on a day, and also created in the calendar. In combination with the date offset patterns above, it further allows scheduling preparation time days or hours before events.  Please note:
 - If no finish time is set, then the event defaults to an hour.
+- You can use the shortcut `3PM` when you don't need to specify the minutes -- though NotePlan currently doesn't recognise this syntax for time blocks
 - If am/AM or pm/PM isn't specified, then the hours given are assumed to be in 24-hour clock
 - It's best to put any `at place` location at the end of the line, as there's no easy way of telling how a location finishes, so it will use the rest of the line.
 - Any indented following lines are copied to the event description, with leading whitespace removed.

@@ -1,12 +1,12 @@
 #!/usr/bin/ruby
 #-------------------------------------------------------------------------------
 # NotePlan Tools script
-# by Jonathan Clark, v1.8.2, 2.1.2021
+# by Jonathan Clark, v1.8.3, 6.1.2021
 #-------------------------------------------------------------------------------
 # See README.md file for details, how to run and configure it.
 # Repository: https://github.com/jgclark/NotePlan-tools/
 #-------------------------------------------------------------------------------
-VERSION = "1.8.2"
+VERSION = "1.8.3"
 
 require 'date'
 require 'time'
@@ -278,6 +278,14 @@ class NPFile
         start_mins = time_parts[1].to_i
         end_hour = start_hour + 1 # if no end part given, default to a 1-hour duration event
         end_mins = start_mins
+      elsif this_line =~ /[^\d-]\d\d?(am|pm)[\s$]/i
+        # times of form '3am|pm'
+        time_parts_da = this_line.scan(/[^\d-](\d\d?)(am|pm)[\s$]/i)
+        time_parts = time_parts_da[0]
+        start_hour = time_parts[1] =~ /pm/i ? time_parts[0].to_i + 12 : time_parts[0].to_i
+        start_mins = 0
+        end_hour = start_hour + 1 # if no end part given, default to a 1-hour duration event
+        end_mins = 0
       elsif this_line =~ /[^\d-]\d\d?:\d\d-\d\d?:\d\d(am|pm)?[\s$]/i
         # times of form '3:00-4:00[am|pm]'
         time_parts_da = this_line.scan(/[^\d-](\d\d?):(\d\d)-(\d\d?):(\d\d)(am|pm)?[\s$]/i)
@@ -297,7 +305,7 @@ class NPFile
       end_dt   = DateTime.new(event_date_s[0..3].to_i, event_date_s[4..5].to_i, event_date_s[6..7].to_i, end_hour, end_mins, 0)
       start_dt_s = start_dt.strftime(DATE_TIME_APPLESCRIPT_FORMAT)
       end_dt_s   = end_dt.strftime(DATE_TIME_APPLESCRIPT_FORMAT)
-      puts "  - will create '#{event_title}' from #{start_dt_s} to #{end_dt_s}" if $verbose > 0
+      puts "  - will create event '#{event_title}' from #{start_dt_s} to #{end_dt_s}"
       puts "    (time_parts:#{time_parts})" if $verbose > 1
 
       # use ' at X...' to set the_location (rather than that type of timeblocking)

@@ -1,5 +1,8 @@
 # CHANGELOG
 
+## v1.8.3 6.1.2021
+- [Improve] Can now use simpler '3PM' type of time spec when creating events.
+
 ## v1.8.2. 2.1.2021
 - [Improve] Can now customise the `#create_event` tag used to trigger creating events. Also opens the selected Calendar app if needed first, and reduces the delay if not. [Issue 36]
 
