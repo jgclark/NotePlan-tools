@@ -52,3 +52,4 @@ build-iPhoneSimulator/
 .vscode/settings.json
 .vscode/launch.json
 *.code-workspace
+.DS_Store

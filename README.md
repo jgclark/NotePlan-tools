@@ -32,9 +32,7 @@ Changes any mentions of **date offset patterns** (e.g. `{-10d}`, `{+2w}`, `{-3m}
 
 **Creates new events** in Apple Calendar, when the `#createevent` tag is used on a line (task, comment or heading) with a timeblocking command such as `3:00-3:45[AM|PM]` or `3PM`) and location such as `at Jim's`. This allows for meeting events to be listed on a day, and also created in the calendar. In combination with the date offset patterns above, it further allows scheduling preparation time days or hours before events.  
 
-<video autoplay><source src="npTools-create_event.mp4" type="video/mp4"></video>
-
-![something](./npTools-create_event.mp4)
+![Video showing event creation](npTools-create_event.gif)
 
 Important notes:
 - If no finish time is set, then the event defaults to an hour.
