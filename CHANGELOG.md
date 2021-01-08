@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## v1.8.5 8.1.2021
+- [Add] For event creation can now also specify time patterns of form 4-6PM and just 3-4
+- [Add] Extend logging to see why some files aren't matching for a user
+
 ## v1.8.4 8.1.2021
 - [Add] Add a second custom date match style for base dates to use in date offset patterns. See README for RE_DATE_OFFSET_CUSTOM.
 - [Change] The built-in date match style for base dates is now NotePlan's usual YYYY-MM-DD, not DD-MM-YYYY etc.

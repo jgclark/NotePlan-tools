@@ -1,12 +1,12 @@
 #!/usr/bin/ruby
 #-------------------------------------------------------------------------------
 # NotePlan Tools script
-# by Jonathan Clark, v1.8.4, 8.1.2021
+# by Jonathan Clark, v1.8.5, 8.1.2021
 #-------------------------------------------------------------------------------
 # See README.md file for details, how to run and configure it.
 # Repository: https://github.com/jgclark/NotePlan-tools/
 #-------------------------------------------------------------------------------
-VERSION = "1.8.4"
+VERSION = "1.8.5"
 
 require 'date'
 require 'time'
@@ -165,9 +165,8 @@ class NPFile
     $npfile_count += 1
     @id = $npfile_count
     @filename = this_file
-    puts "initialising NPFile id #{@id} from #{this_file}" if $verbose > 1
     @modified_time = File.exist?(filename) ? File.mtime(this_file) : 0
-    @title = nil
+    @title = ''
     @lines = []
     @line_count = 0
     @cancelled_header = 0
@@ -175,6 +174,8 @@ class NPFile
     @is_today = false
     @is_calendar = false
     @is_updated = false
+
+    puts "Init NPFile #{@id} from #{this_file}, updated #{File.mtime(this_file)}" if $verbose > 1
 
     # initialise other variables (that don't need to persist with the class)
     n = 0
@@ -199,8 +200,8 @@ class NPFile
       @is_today = @title == $date_today
     else
       # otherwise use first line (but take off heading characters at the start and starting and ending whitespace)
-      tempTitle = @lines[0].gsub(/^#+\s*/, '')
-      @title = tempTitle.gsub(/\s+$/, '')
+      tempTitle = @lines[0].gsub(/^#+\s*/, '').gsub(/\s+$/, '')
+      @title = !tempTitle.empty? ? tempTitle : 'temp_header' # but check it doesn't get to be blank
       @is_calendar = false
       @is_today = false
     end
@@ -261,18 +262,6 @@ class NPFile
       # if no end time given, default to a 1-hour duration event
       start_mins = end_mins = start_hour = end_hour = 0
       time_parts = []
-      # if this_line =~ / at \d\d?(am|pm)?[\s$]/i
-      #   # times of form 'at 11[am|pm]' (case insensitive)
-      #   time_parts_da = this_line.scan(/ at (\d\d?)(am|pm)?\D/i) # returns array of groups in time_parts[0] *not* time_parts
-      #   time_parts = time_parts_da[0]
-      #   start_hour = !time_parts[1].nil? && time_parts[1] =~ /pm/i ? time_parts[0].to_i + 12 : time_parts[0].to_i
-      #   end_hour = start_hour + 1
-      # elsif this_line =~ / at \d\d?-\d\d?(am|pm)?[\s$]/i
-      # # times of form 'at 9-11[am|pm]' (case insensitive)
-      #   time_parts_da = this_line.scan(/ at (\d\d?)-(\d\d?)(am|pm)?\D/i)
-      #   time_parts = time_parts_da[0]
-      #   start_hour = !time_parts[2].nil? && time_parts[2] =~ /pm/i ? time_parts[0].to_i + 12 : time_parts[0].to_i
-      #   end_hour = !time_parts[2].nil? && time_parts[2] =~ /pm/i ? time_parts[1].to_i + 12 : time_parts[1].to_i
       if this_line =~ /[^\d-]\d\d?:\d\d(am|pm|AM|PM)?[\s$]/i
         # times of form '3:00[am|pm]'
         time_parts_da = this_line.scan(/[^\d-](\d\d?):(\d\d)(am|pm)?[\s$]/i)
@@ -288,6 +277,22 @@ class NPFile
         start_hour = time_parts[1] =~ /pm/i ? time_parts[0].to_i + 12 : time_parts[0].to_i
         start_mins = 0
         end_hour = start_hour + 1 # if no end part given, default to a 1-hour duration event
+        end_mins = 0
+      elsif this_line =~ /[^\d-]\d\d?-\d\d?[\s$]/i
+        # times of form '3-5', implied 24-hour clock
+        time_parts_da = this_line.scan(/[^\d-](\d\d?)-(\d\d?)[\s$]/i)
+        time_parts = time_parts_da[0]
+        start_hour = time_parts[0].to_i
+        start_mins = 0
+        end_hour = time_parts[1].to_i
+        end_mins = 0
+      elsif this_line =~ /[^\d-]\d\d?-\d\d?(am|pm)[\s$]/i
+        # times of form '3-5am|pm'
+        time_parts_da = this_line.scan(/[^\d-](\d\d?)-(\d\d?)(am|pm)[\s$]/i)
+        time_parts = time_parts_da[0]
+        start_hour = time_parts[2] =~ /pm/i ? time_parts[0].to_i + 12 : time_parts[0].to_i
+        start_mins = 0
+        end_hour = time_parts[2] =~ /pm/i ? time_parts[1].to_i + 12 : time_parts[1].to_i
         end_mins = 0
       elsif this_line =~ /[^\d-]\d\d?:\d\d-\d\d?:\d\d(am|pm)?[\s$]/i
         # times of form '3:00-4:00[am|pm]'
@@ -902,7 +907,7 @@ class NPFile
     # Go through each line in the file
     later_header_level = this_header_level = 0
     at_eof = 1
-    while n.positive? || n.zero? # FIXME: is this BMStroh addition killing some note titles?
+    while n.positive? || n.zero? # FIXME: this BMStroh addition killing some note titles?
       line = @lines[n]
       # find header lines
       # puts "  - #{n}: '#{line.chomp}'"
@@ -1041,7 +1046,7 @@ begin
 rescue StandardError => e
   puts "ERROR: #{e.exception.message} when reading in all notes files".colorize(WarningColour)
 end
-puts "Read in all Note files: #{$npfile_count} found" if $verbose > 0
+puts "Read in all Note files: #{$npfile_count} found\n" if $verbose > 0
 
 if ARGV.count.positive?
   # We have a file pattern given, so find that (starting in the notes directory), and use it
@@ -1049,21 +1054,15 @@ if ARGV.count.positive?
   begin
     ARGV.each do |pattern|
       # if pattern has a '.' in it assume it is a full filename ...
-      if pattern =~ /\./
-        glob_pattern = pattern
-      else
-        # ... otherwise treat as close to a regex term as possible with Dir.glob
-        glob_pattern = '[!@]**/*' + pattern + '*.{md,txt}'
-      end
-      puts " For glob_pattern #{glob_pattern} found note filenames:" if $verbose > 1
+      # ... otherwise treat as close to a regex term as possible with Dir.glob
+      glob_pattern = pattern =~ /\./ ? pattern : '[!@]**/*' + pattern + '*.{md,txt}'
+      puts "  For glob_pattern #{glob_pattern} found note filenames:" if $verbose > 0
       Dir.glob(glob_pattern).each do |this_file|
-        puts "  #{this_file}" if $verbose
+        puts "  - #{this_file}" if $verbose > 0
         # Note has already been read in; so now just find which one to point to, by matching filename
         $allNotes.each do |this_note|
-          if this_note.filename == this_file
-            $notes << this_note # copy the $allNotes item into $notes array
-            # n += 1
-          end
+          # copy the $allNotes item into $notes array
+          $notes << this_note if this_note.filename == this_file
         end
       end
 
@@ -1071,11 +1070,10 @@ if ARGV.count.positive?
       Dir.chdir(NP_CALENDAR_DIR)
       glob_pattern = '*' + pattern + '*.{md,txt}'
       Dir.glob(glob_pattern).each do |this_file|
-        puts "  #{this_file}" if $verbose
+        puts "  - #{this_file}" if $verbose > 0
         next if File.zero?(this_file) # ignore if this file is empty
 
         $notes << NPFile.new(this_file)
-        # n += 1
       end
     end
   rescue StandardError => e
@@ -1084,7 +1082,6 @@ if ARGV.count.positive?
 
 else
   # Read metadata for all Note files, and find those altered in the last 24 hours
-  mtime = 0
   puts "Starting npTools at #{time_now_fmttd} for all NP files altered in last #{HOURS_TO_PROCESS} hours." unless $quiet
   begin
     $allNotes.each do |this_note|
@@ -1092,7 +1089,6 @@ else
 
       # Note has already been read in; so now just find which one to point to
       $notes << this_note
-      # n += 1
     end
   rescue StandardError => e
     puts "ERROR: #{e.exception.message} when finding recently changed files".colorize(WarningColour)
@@ -1102,14 +1098,13 @@ else
   begin
     Dir.chdir(NP_CALENDAR_DIR)
     Dir.glob(['{[!@]**/*,*}.{txt,md}']).each do |this_file|
-      # if modified time (mtime) in the last 24 hours
-      mtime = File.mtime(this_file)
+      puts "    Checking daily file #{this_file}, updated #{File.mtime(this_file)}, size #{File.size(this_file)}" if $verbose > 1
       next if File.zero?(this_file) # ignore if this file is empty
-      next unless mtime > (time_now - HOURS_TO_PROCESS * 60 * 60)
+      # if modified time (mtime) in the last 24 hours
+      next unless File.mtime(this_file) > (time_now - HOURS_TO_PROCESS * 60 * 60)
 
       # read the calendar file in
       $notes << NPFile.new(this_file)
-      # n += 1
     end
   rescue StandardError => e
     puts "ERROR: #{e.exception.message} when finding recently changed files".colorize(WarningColour)
@@ -1117,22 +1112,20 @@ else
 end
 
 #--------------------------------------------------------------------------------------
-
 if $notes.count.positive? # if we have some files to work on ...
-  puts "Found #{$notes.count} files to process:" if $verbose > 0
+  puts "\nFound #{$notes.count} files to process:" if $verbose > 0
   # For each NP file to process, do the following:
   $notes.sort! { |a, b| a.title <=> b.title }
   $notes.each do |note|
     if note.is_today && options[:skiptoday]
-      puts 'Skipping ' + note.title.to_s.bold + ' due to --skiptoday option' if $verbose > 0
+      puts '(Skipping ' + note.title.to_s.bold + ' due to --skiptoday option)' if $verbose > 0
       next
     end
     if options[:skipfile].include? note.title
-      # FIXME: shouldn't get here when this option isn't given
-      puts 'Skipping ' + note.title.to_s.bold + ' due to --skipfile option' if $verbose > 0
+      puts '(Skipping ' + note.title.to_s.bold + ' due to --skipfile option)' if $verbose > 0
       next
     end
-    puts "Processing file " + note.title.to_s.bold + " (id #{note.id})" if $verbose > 0
+    puts " Processing file id #{note.id}: " + note.title.to_s.bold if $verbose > 0
     note.clear_empty_tasks_or_headers
     note.remove_empty_header_sections
     note.remove_unwanted_tags_dates
@@ -1142,7 +1135,7 @@ if $notes.count.positive? # if we have some files to work on ...
     note.move_daily_ref_to_notes if note.is_calendar && options[:move] == 1
     note.use_template_dates unless note.is_calendar
     note.create_events_from_timeblocks
-    note.archive_lines if $archive == 1
+    note.archive_lines if $archive == 1 # not ready yet
     # If there have been changes, write out the file
     note.rewrite_file if note.is_updated
   end
