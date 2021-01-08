@@ -1,5 +1,8 @@
 # CHANGELOG
 
+## v1.8.6 8.1.2021
+- [Add] Works with tasks that use the `- ` and `- [ ]` markers, as well as `* ` and `* [ ]` [Issue 24]
+
 ## v1.8.5 8.1.2021
 - [Add] For event creation can now also specify time patterns of form 4-6PM and just 3-4
 - [Add] Extend logging to see why some files aren't matching for a user

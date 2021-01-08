@@ -1,12 +1,12 @@
 #!/usr/bin/ruby
 #-------------------------------------------------------------------------------
 # NotePlan Tools script
-# by Jonathan Clark, v1.8.5, 8.1.2021
+# by Jonathan Clark, v1.8.6, 8.1.2021
 #-------------------------------------------------------------------------------
 # See README.md file for details, how to run and configure it.
 # Repository: https://github.com/jgclark/NotePlan-tools/
 #-------------------------------------------------------------------------------
-VERSION = "1.8.5"
+VERSION = "1.8.6"
 
 require 'date'
 require 'time'
@@ -187,7 +187,6 @@ class NPFile
       @lines[n] = line
       @done_header = n  if line =~ /^## Done$/
       @cancelled_header = n if line =~ /^## Cancelled$/
-      # n -= 1 if line =~ /^\s*[\*\-]\s*$/ # i.e. remove lines with just a * or -
       n += 1
     end
     f.close
@@ -250,8 +249,7 @@ class NPFile
       # make title: strip off #create_event, time strings, header/task/bullet punctuation, and any location info
       event_title = this_line.chomp
       event_title.gsub!(/ #{CREATE_EVENT_TAG_TO_USE}/, '')
-      event_title.gsub!(/^\s*[->]\s+/, '')
-      event_title.gsub!(/^\s*\*\s(\[.\])?\s*/, '')
+      event_title.gsub!(/^\s*[\*->](\s\[.\])?\s*/, '')
       event_title.gsub!(/^#+\s*/, '')
       event_title.gsub!(/ at \d\d?(-\d\d?)?(am|pm|AM|PM)?/, '')
       event_title.gsub!(/ \d\d?:\d\d(-\d\d?:\d\d)?(am|pm|AM|PM)?/, '')
@@ -470,12 +468,12 @@ class NPFile
       line = @lines[n]
       is_header = false
       # find lines with [[note title]] mentions
-      if line !~ /\[\[.*\]\]|^\s*.*\[\[.*\]\]/ # used to be /^#+\s+.*\[\[.*\]\]|^\s*.*\[\[.*\]\]/
+      if line !~ /\[\[.+\]\]/ # used to be /\[\[.+\]\]|^\s*.*\[\[.*\]\]/ # used to be /^#+\s+.*\[\[.*\]\]|^\s*.*\[\[.*\]\]/
         # this line doesn't match, so break out of loop and go to look at next line
         n += 1
         next
       end
-      is_header = true if line =~ /^#+\s+.*/ # used to be /^#+\s+.*\[\[.*\]\]/
+      is_header = true if line =~ /^#+\s+.*/
 
       # the following regex matches returns an array with one item, so make a string (by join)
       # NB the '+?' gets minimum number of chars, to avoid grabbing contents of several [[notes]] in the same line
@@ -484,14 +482,12 @@ class NPFile
       puts "  - found note link [[#{noteName}]] in notes on line #{n + 1} of #{@line_count}" if !is_header && ($verbose > 0)
 
       # find the note file to add to
-      # expect there to be several with same title: if so then use the one with
-      # the most recent modified_time
+      # expect there to be several with same title: if so then use the one with the most recent modified_time
       # mtime = Time.new(1970, 1, 1) # i.e. the earlist possible time
       $allNotes.each do |nn|
         next if nn.title != noteName
 
-        noteToAddTo = nn.id # if nn.modified_time > mtime # TODO: is this needed?
-        # mtime = nn.modified_time
+        noteToAddTo = nn.id # if nn.modified_time > mtime # TODO: bring this back in
         puts "  - found matching title (id #{noteToAddTo}) " if $verbose > 1
       end
 
@@ -511,11 +507,11 @@ class NPFile
       # Remove the [[name]] text by finding string points
       label_start = line.index('[[') - 2 # remove space before it as well
       label_end = line.index(']]') + 2
-      line = "#{line[0..label_start]}#{line[label_end..-2]}" # also chomp off last character (newline)
+      # also chomp off last character (newline)
+      line = "#{line[0..label_start]}#{line[label_end..-2]}"
 
       if !is_header
-        # This is a todo line ...
-        # If no due date is specified in rest of the todo, add date from the title of the calendar file it came from
+        # If no due date is specified in rest of the line, add date from the title of the calendar file it came from
         if line !~ />\d{4}\-\d{2}\-\d{2}/
           cal_date = "#{@title[0..3]}-#{@title[4..5]}-#{@title[6..7]}"
           puts "    - '#{cal_date}' to add from #{@title}" if $verbose > 1
@@ -523,11 +519,10 @@ class NPFile
         else
           lines_to_output = line
         end
-        # puts "    - '#{lines_to_output}' and now n=#{n + 1}" if $verbose > 1
         # Work out indent level of current line
         line_indent = ''
         line.scan(/^(\s*)\*/) { |m| line_indent = m.join }
-        puts "  - starting task analysis at line #{n + 1} of #{@line_count} with indent '#{line_indent}' (#{line_indent.length})" if $verbose > 1
+        puts "  - starting line analysis at line #{n + 1} of #{@line_count} with indent '#{line_indent}' (#{line_indent.length})" if $verbose > 1
         # Remove this line from the calendar note
         @lines.delete_at(n)
         @line_count -= 1
@@ -604,14 +599,14 @@ class NPFile
     while n < searchLineLimit
       n += 1
       line = @lines[n]
-      next unless line =~ /\*\s+\[x\]/
+      next unless line =~ /\*\s+\[x\]/ # TODO change for different task markers
 
       # save this line number
       doneToMove.push(n)
       # and look ahead to see how many lines to move -- all until blank or starting # or *
       linesToMove = 0
       while n < @line_count
-        break if (@lines[n + 1] =~ /^(#+\s+|\*\s+)/) || (@lines[n + 1] =~ /^\s*$/)
+        break if (@lines[n + 1] =~ /^(#+\s+|\*\s+)/) || (@lines[n + 1] =~ /^\s*$/) # TODO change for different task markers
 
         linesToMove += 1
         n += 1
@@ -667,7 +662,7 @@ class NPFile
     while n < searchLineLimit
       n += 1
       line = @lines[n]
-      next unless line =~ /\*\s*\[\-\]/
+      next unless line =~ /\*\s*\[\-\]/ # TODO change for different task markers
 
       # save this line number
       cancToMove.push(n)
@@ -675,7 +670,7 @@ class NPFile
       linesToMove = 0
       while n < @line_count
         linesToMove += 1
-        break if (@lines[n + 1] =~ /^(#+\s+|\*\s+)/) || (@lines[n + 1] =~ /^\s*$/)
+        break if (@lines[n + 1] =~ /^(#+\s+|\*\s+)/) || (@lines[n + 1] =~ /^\s*$/) # TODO change for different task markers
 
         n += 1
       end

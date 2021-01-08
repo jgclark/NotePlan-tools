@@ -9,7 +9,7 @@ It **tidies up** data files, by:
 1. removing the time part of any `@done(...)` mentions that NotePlan automatically adds when the 'Append Completion Date' option is on.
 2. removing `#waiting` or `#high` tags or `<dates` from completed or cancelled tasks (configurable)
 3. removing scheduled (`* [>] task`) items in calendar files (as they've been copied to a new day)
-4. removing any lines with just * or - or starting #s
+4. removing any lines with just `* `or `-` or starting `#`s
 5. removing header lines without any content before the next header line of the same or higher level (i.e. fewer `#`s)
 6. removing any multiple consecutive blank lines.
 
@@ -48,30 +48,30 @@ In more detail:
 - But you can add another custom date format to use by setting the `RE_DATE_FORMAT_CUSTOM` variable (see below). The dates matched by this regular expression must additionally be caapble of being correctly parsed by ruby's Date.parse() built-in command, over which I have no control.
 
 ### Create new Calendar Events
-NotePlan allows for time-blocking, but this only works to its in-built calendar display. With npTools you also create full events that are visible and editable in Apple Calendar, or any other apps that use iCloud.  To do this use the `#create_event` tag is used on a line (task, comment or heading) with a timeblocking command such as `3:00-3:45[AM|PM]` or `3PM` and location such as `at Jim's`. This allows for meeting events to be listed on a day, and also created in the calendar. In combination with the date offset patterns above, it further allows scheduling preparation time days or hours before events.  
+NotePlan allows for time-blocking, but this only works to its in-built calendar display. With npTools you also create full events that are visible and editable in Apple Calendar, or any other apps that use iCloud.  To do this use the `#create_event` tag is used on a line (task, comment or heading) with a timeblocking command such as `3:00-3:45[AM|PM]` or `3-5pm` or `3PM` and location such as `at Jim's`. This allows for meeting events to be listed on a day, and also created in the calendar. In combination with the date offset patterns above, it further allows scheduling preparation time days or hours before events.  
 
 For example to create a meeting event:
 ```
-### Project X Meeting #create_event 10:00am at Jim's
+### Project X Meeting #create_event 10:30am at Jim's
 ```
 
 To extend this and use the date templates, add a timed task with calendar entry to do some associated tasks 5 days before it, and the following morning:
 ```
-### Project X Meeting 21-12-2020 #create_event 10:00am at Jim's
+### Project X Meeting 21-12-2020 #create_event 10:30am at Jim's
 * write and circulate agenda {-5d} #create_event 4pm
-* send out actions {1d} #create_event 9:00
+* send out actions {1d} #create_event 9am
 ```
 
 ![Video showing event creation](npTools-create_event.gif)
 
-Important notes:
+Notes on this:
 - If no finish time is set, then the event defaults to an hour.
-- You can use the shortcut `3PM` when you don't need to specify the minutes -- though NotePlan currently doesn't recognise this syntax for time blocks
+- You can use the shortcut `3PM` or `3-5PM` when you don't need to specify the minutes -- though NotePlan itself currently doesn't recognise this syntax for time blocks
 - If am/AM or pm/PM isn't given, then the hours are assumed to be in 24-hour clock
-- It's best to put any `at place` location at the end of the line, as there's no easy way of telling how a location finishes, so it will use the rest of the line.
+- It's best to put any `at place` location at the end of the line, as there's no easy way of telling how a location finishes, so it will use the rest of the line as the location.
 - Any indented following lines are copied to the event description, with leading whitespace removed.
 - Under the hood this uses AppleScript, and takes a few seconds per event.  Once it has run succesfully the `#create_event` is changed to `#event_created` so that it won't be triggered again.  
-- There are some settings that need to be configured for this: see Installation and Configuration below.
+- There are some calendar settings that need to be configured for this: see Installation and Configuration below.
 
 ### Extend the existing @repeat mechanism
 It **creates new repeats** for newly completed tasks that include a `@repeat(interval)`, on the appropriate future date.
@@ -102,7 +102,7 @@ You can also specify **options**:
 
 It works with all 3 storage options for storing NotePlan data: CloudKit (the default from NotePlan v3), iCloud Drive and Dropbox.
 
-**NB**: NotePlan has several options in the Markdown settings for how to mark a task, including `- `. At the moment this script only allows for `* `.
+**NB**: NotePlan has several options in the Markdown settings for how to mark a task, including `-`, `- [ ]', `*` and `* [ ]`. All are supported by this script.
 
 ## Installation and Configuration
 1. Check you have a working Ruby installation.
