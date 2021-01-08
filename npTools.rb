@@ -1,12 +1,12 @@
 #!/usr/bin/ruby
 #-------------------------------------------------------------------------------
 # NotePlan Tools script
-# by Jonathan Clark, v1.8.3, 6.1.2021
+# by Jonathan Clark, v1.8.4, 8.1.2021
 #-------------------------------------------------------------------------------
 # See README.md file for details, how to run and configure it.
 # Repository: https://github.com/jgclark/NotePlan-tools/
 #-------------------------------------------------------------------------------
-VERSION = "1.8.3"
+VERSION = "1.8.4"
 
 require 'date'
 require 'time'
@@ -21,7 +21,7 @@ HOURS_TO_PROCESS = 24 # by default will process all files changed within this nu
 NUM_HEADER_LINES = 3 # suits my use, but probably wants to be 1 for most people
 TAGS_TO_REMOVE = ['#waiting', '#high'].freeze # simple array of strings
 DATE_TIME_LOG_FORMAT = '%e %b %Y %H:%M'.freeze # only used in logging
-DATE_OFFSET_FORMAT = '%e-%b-%Y'.freeze # TODO: format used to find date to use in offsets
+RE_DATE_FORMAT_CUSTOM = '\d{1,2}[\-\.//][01]?\d[\-\.//]\d{4}'.freeze # regular expression of alternative format used to find dates in templates. This matches DD.MM.YYYY and similar.
 DATE_TODAY_FORMAT = '%Y%m%d'.freeze # using this to identify the "today" daily note
 DATE_TIME_APPLESCRIPT_FORMAT = '%e %b %Y %H:%M:%S'.freeze # only used when creating Calendar events (via AppleScript)
 CALENDAR_APP_TO_USE = 'Calendar' # Name of Calendar app to use in create_event AppleScript. Default is 'Calendar'.
@@ -31,6 +31,7 @@ CREATE_EVENT_TAG_TO_USE = '#create_event' # customise if you want a different ta
 #-------------------------------------------------------------------------------
 # Other Constants & Settings
 #-------------------------------------------------------------------------------
+RE_YYYY_MM_DD = '\d{4}[\-\.//][01]?\d[\-\.//]\d{1,2}' # built-in format for finding dates of form YYYY-MM-DD and similar
 USERNAME = ENV['LOGNAME'] # pull username from environment
 USER_DIR = ENV['HOME'] # pull home directory from environment
 DROPBOX_DIR = "#{USER_DIR}/Dropbox/Apps/NotePlan/Documents".freeze
@@ -240,8 +241,10 @@ class NPFile
         puts "    - found event creation date spec: #{event_date_s}" if $verbose > 1
       elsif @is_calendar
         event_date_s = @filename[0..7]
+        puts "    - defaulting to create event on day: #{event_date_s}" if $verbose > 1
       else
         event_date_s = $date_today
+        puts "    - defaulting to create event today: #{event_date_s}" if $verbose > 1
       end
       # make title: strip off #create_event, time strings, header/task/bullet punctuation, and any location info
       event_title = this_line.chomp
@@ -748,55 +751,70 @@ class NPFile
   def use_template_dates
     # Take template dates and turn into real dates
     puts '  use_template_dates ...' if $verbose > 1
-    # TODO: Allow templates to be set inline where there's a deadline set
-    dateString = ''
-    currentTargetDate = ''
-    calcDate = ''
-    lastWasTemplate = false
+    date_string = ''
+    current_target_date = ''
+    calc_date = ''
+    last_was_template = false
     n = 0
     # Go through each line in the file
     @lines.each do |line|
-      dateString = ''
-      # find date in markdown header lines (of form d.m.yyyy and variations of that form)
+      date_string = ''
+      # look for base date, of form YYYY-MM-DD and variations and whatever RE_DATE_FORMAT_CUSTOM gives
       if line =~ /^#+\s/
         # clear previous settings when we get to a new heading
-        currentTargetDate = ''
-        lastWasTemplate = false
-        # TODO: Allow configuration of the format of the date it's looking for with the DATE_OFFSET_FORMAT variable
-        line.scan(%r{(\d{1,2}[\-\./]\d{1,2}[\-\./]\d{4})}) { |m| dateString = m.join }
-        if dateString != ''
-          # We have a date string to use for any offsets in the following section
-          currentTargetDate = dateString
-          puts "    UTD: Found CTD #{currentTargetDate} in '#{line.chomp}'" if $verbose > 1
-        end
-        if line =~ /#template/
-          # We have a #template tag so ignore any offsets in the following section
-          lastWasTemplate = true
-          puts "    UTD: Found #template in '#{line.chomp}'" if $verbose > 1
-        end
+        current_target_date = ''
+        last_was_template = false
       end
 
-      # find todo lines with {+3d} or {-4w} etc. plus {0d} special case
-      dateOffsetString = ''
-      if (line =~ /\*\s+(\[ \])?/) && (line =~ /\{[\+\-]?\d+[bdwm]\}/)
-        puts "    UTD: Found line '#{line.chomp}'" if $verbose > 1
-        line.scan(/\{([\+\-]?\d+[bdwm])\}/) { |m| dateOffsetString = m.join }
-        if dateOffsetString != '' && !lastWasTemplate
-          puts "    UTD: Found DOS #{dateOffsetString} in '#{line.chomp}' and lastWasTemplate=#{lastWasTemplate}" if $verbose > 1
-          if currentTargetDate != ''
-            calcDate = calc_offset_date(Date.parse(currentTargetDate), dateOffsetString)
+      # Try matching for the standard YYYY-MM-DD date pattern
+      line.scan(/[^\d\(<>](#{RE_YYYY_MM_DD})/) { |m| date_string = m.join }
+      if date_string != ''
+        # We have a date string to use for any offsets in the following section
+        current_target_date = date_string
+        puts "    - Found CTD #{current_target_date} in '#{line.chomp}'" if $verbose > 1
+      else
+        # Try matching for the custom date pattern, configured at the top
+        line.scan(/[^\d\(<>](#{RE_DATE_FORMAT_CUSTOM})/) { |m| date_string = m.join }
+        if date_string != ''
+          # We have a date string to use for any offsets in the following section
+          current_target_date = date_string
+          puts "    - Found CTD #{current_target_date} in '#{line.chomp}'" if $verbose > 1
+        end
+      end
+      if line =~ /#template/
+        # We have a #template tag so ignore any offsets in the following section
+        last_was_template = true
+        puts "    . Found #template in '#{line.chomp}'" if $verbose > 1
+      end
+
+      # ignore line if last_was_template
+      break if last_was_template
+
+      # find lines with {+3d} or {-4w} etc. plus {0d} special case
+      date_offset_string = ''
+      if line =~ /\{[\+\-]?\d+[bdwm]\}/
+        puts "    - Found line '#{line.chomp}'" if $verbose > 1
+        line.scan(/\{([\+\-]?\d+[bdwm])\}/) { |m| date_offset_string = m.join }
+        if date_offset_string != ''
+          puts "    - Found DOS #{date_offset_string} in '#{line.chomp}' and last_was_template=#{last_was_template}" if $verbose > 1
+          if current_target_date != ''
+            begin
+              calc_date = calc_offset_date(Date.parse(current_target_date), date_offset_string)
+            rescue
+              puts "    Error while parsing date '#{current_target_date}' for #{date_offset_string}".colorize(WarningColour)
+            end
             # Remove the offset text (e.g. {-3d}) by finding string points
             label_start = line.index('{') - 1
             label_end = line.index('}') + 2
             line = "#{line[0..label_start]}#{line[label_end..-2]}" # also chomp off last character (newline)
             # then add the new date
-            line += " >#{calcDate}"
+            line += ">#{calc_date}"
             @lines[n] = line
-            puts "    Used #{dateOffsetString} line to make '#{line.chomp}'" if $verbose > 1
+            puts "      -> Used #{date_offset_string} line to make '#{line.chomp}'" if $verbose > 1
             @is_updated = true
             @line_count += 1
           elsif $verbose > 0
-            puts "    Warning: have a template, but no currentTargetDate before line '#{line.chomp}'".colorize(WarningColour)
+            puts "    Warning: have an offset date, but no current_target_date before line '#{line.chomp}'".colorize(WarningColour)
           end
         end
       end
@@ -1023,7 +1041,7 @@ begin
 rescue StandardError => e
   puts "ERROR: #{e.exception.message} when reading in all notes files".colorize(WarningColour)
 end
-puts "Read in all #{$npfile_count} Note files" if $verbose > 0
+puts "Read in all Note files: #{$npfile_count} found" if $verbose > 0
 
 if ARGV.count.positive?
   # We have a file pattern given, so find that (starting in the notes directory), and use it
@@ -1110,6 +1128,7 @@ if $notes.count.positive? # if we have some files to work on ...
       next
     end
     if options[:skipfile].include? note.title
+      # FIXME: shouldn't get here when this option isn't given
       puts 'Skipping ' + note.title.to_s.bold + ' due to --skipfile option' if $verbose > 0
       next
     end
