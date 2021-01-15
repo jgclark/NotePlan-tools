@@ -66,7 +66,7 @@ To extend this and use the date templates, add a timed task with calendar entry 
 
 Notes on this:
 - If no finish time is set, then the event defaults to an hour.
-- You can use the shortcut `3PM` or `3-5PM` when you don't need to specify the minutes -- though NotePlan itself currently doesn't recognise this syntax for time blocks
+- You can use the shortcut `3PM` or `3-5PM` when you don't need to specify the minutes -- though NotePlan itself currently doesn't recognise this syntax for time blocks. You can specify minutes as well either using `3:45` or `3.15` formats.
 - If am/AM or pm/PM isn't given, then the hours are assumed to be in 24-hour clock
 - It's best to put any `at place` location at the end of the line, as there's no easy way of telling how a location finishes, so it will use the rest of the line as the location.
 - Any indented following lines are copied to the event description, with leading whitespace removed.

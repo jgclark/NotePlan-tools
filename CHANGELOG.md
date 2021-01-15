@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## v1.9.0, 15.1.2021
+- [Improve] Allow more types of time spec when creating events (e.g. "2.45PM" or "3.15-5.00"
+- [Fix] spacing around processed template dates (e.g. {3d})
+- [Clean up] Remove some obsolete code and add some more logging
+
+## v1.8.6 8.1.2021
+- [Fix] Allow event creation to work with "Language & Region" settings that use a 12-hour not a 24-hour clock [Issue 37]
+
 ## v1.8.6 8.1.2021
 - [Add] Works with tasks that use the `- ` and `- [ ]` markers, as well as `* ` and `* [ ]` [Issue 24]
 

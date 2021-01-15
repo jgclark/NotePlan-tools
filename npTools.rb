@@ -1,12 +1,12 @@
 #!/usr/bin/ruby
 #-------------------------------------------------------------------------------
 # NotePlan Tools script
-# by Jonathan Clark, v1.8.6, 8.1.2021
+# by Jonathan Clark, v1.9.0, 15.1.2021
 #-------------------------------------------------------------------------------
 # See README.md file for details, how to run and configure it.
 # Repository: https://github.com/jgclark/NotePlan-tools/
 #-------------------------------------------------------------------------------
-VERSION = "1.8.6"
+VERSION = "1.9.0"
 
 require 'date'
 require 'time'
@@ -23,7 +23,8 @@ TAGS_TO_REMOVE = ['#waiting', '#high'].freeze # simple array of strings
 DATE_TIME_LOG_FORMAT = '%e %b %Y %H:%M'.freeze # only used in logging
 RE_DATE_FORMAT_CUSTOM = '\d{1,2}[\-\.//][01]?\d[\-\.//]\d{4}'.freeze # regular expression of alternative format used to find dates in templates. This matches DD.MM.YYYY and similar.
 DATE_TODAY_FORMAT = '%Y%m%d'.freeze # using this to identify the "today" daily note
-DATE_TIME_APPLESCRIPT_FORMAT = '%e %b %Y %H:%M:%S'.freeze # only used when creating Calendar events (via AppleScript)
+# DATE_TIME_APPLESCRIPT_FORMAT = '%e %b %Y %I:%M %p'.freeze # format for creating Calendar events (via AppleScript) when Region setting is 12-hour clock
+DATE_TIME_APPLESCRIPT_FORMAT = '%e %b %Y %H:%M:%S'.freeze # format for creating Calendar events (via AppleScript) when Region setting is 24-hour clock
 CALENDAR_APP_TO_USE = 'Calendar' # Name of Calendar app to use in create_event AppleScript. Default is 'Calendar'.
 CALENDAR_NAME_TO_USE = 'Jonathan (iCloud)' # Apple (iCal) Calendar name to create new events in (if required)
 CREATE_EVENT_TAG_TO_USE = '#create_event' # customise if you want a different tag
@@ -99,8 +100,7 @@ def calc_offset_date(old_date, interval)
     puts "    Error in calc_offset_date from #{old_date} by #{interval}".colorize(WarningColour)
   end
   puts "    c_o_d: with #{old_date} interval #{interval} found #{days_to_add} days_to_add" if $verbose > 1
-  newDate = old_date + days_to_add
-  return newDate
+  return old_date + days_to_add
 end
 
 def create_new_empty_file(title, ext)
@@ -119,9 +119,9 @@ def create_new_empty_file(title, ext)
   # Does cope with emojis in titles.
   uriEncoded = "noteplan://x-callback-url/addNote?noteTitle=" + URI.escape(title) + "&openNote=no"
   begin
-    response = `open "#{uriEncoded}"`
-  rescue StandardError
-    puts "  Error trying to add note with #{uriEncoded}. Exiting.".colorize(WarningColour)
+    response = `open "#{uriEncoded}"` # TODO: try simpler open(...) with no response, and rescue errors
+  rescue StandardError => e
+    puts "    Error #{e.exception.message} trying to add note with #{uriEncoded}. Exiting.".colorize(WarningColour)
     exit
   end
 
@@ -144,7 +144,7 @@ end
 
 #-------------------------------------------------------------------------
 # Class definition: NPFile
-# NOTE: in this script this class covers Note *and* Daily files
+# NB: in this script this class covers Note *and* Daily files
 #-------------------------------------------------------------------------
 class NPFile
   # Define the attributes that need to be visible outside the class instances
@@ -161,7 +161,7 @@ class NPFile
   def initialize(this_file)
     # Create NPFile object from reading 'this_file' file
 
-    # Set the file's id
+    # Set variables that are visible outside the class instance
     $npfile_count += 1
     @id = $npfile_count
     @filename = this_file
@@ -174,8 +174,6 @@ class NPFile
     @is_today = false
     @is_calendar = false
     @is_updated = false
-
-    puts "Init NPFile #{@id} from #{this_file}, updated #{File.mtime(this_file)}" if $verbose > 1
 
     # initialise other variables (that don't need to persist with the class)
     n = 0
@@ -204,6 +202,8 @@ class NPFile
       @is_calendar = false
       @is_today = false
     end
+
+    puts "Init NPFile #{@id} from #{this_file}, updated #{@modified_time} #{@line_count} #{@is_calendar}" if $verbose > 1
   end
 
   # def self.new2(*args)
@@ -251,55 +251,62 @@ class NPFile
       event_title.gsub!(/ #{CREATE_EVENT_TAG_TO_USE}/, '')
       event_title.gsub!(/^\s*[\*->](\s\[.\])?\s*/, '')
       event_title.gsub!(/^#+\s*/, '')
-      event_title.gsub!(/ at \d\d?(-\d\d?)?(am|pm|AM|PM)?/, '')
-      event_title.gsub!(/ \d\d?:\d\d(-\d\d?:\d\d)?(am|pm|AM|PM)?/, '')
+      event_title.gsub!(/\s\d\d?(-\d\d?)?(am|pm|AM|PM)/, '') # 3PM, 9-11am etc.
+      event_title.gsub!(/\s\d\d?:\d\d(-\d\d?:\d\d)?(am|pm|AM|PM)?/, '') # 3:00PM, 9:00-9:45am etc.
       event_title.gsub!(/>\d{4}\-\d{2}\-\d{2}/, '')
       event_title.gsub!(/\sat\s.*$/, '')
 
-      # get times for event.
-      # if no end time given, default to a 1-hour duration event
+      # Get times for event.
+      # If no end time given, default to a 1-hour duration event.
+      # NB: See https://github.com/jgclark/NotePlan-tools/issues/37 for details of an oddity with AppleScript,
+      # which means we have to use time format of "HH:MM[ ]am|AM|pm|PM" not "HH:MM:SS" or "HH:MM"
       start_mins = end_mins = start_hour = end_hour = 0
       time_parts = []
-      if this_line =~ /[^\d-]\d\d?:\d\d(am|pm|AM|PM)?[\s$]/i
-        # times of form '3:00[am|pm]'
-        time_parts_da = this_line.scan(/[^\d-](\d\d?):(\d\d)(am|pm)?[\s$]/i)
+      if this_line =~ /[^\d-]\d\d?[:\.]\d\d-\d\d?[:\.]\d\d(am|pm)?[\s$]/i
+        # times of form '3:00-4:00am', '3.00-3.45PM' etc.
+        time_parts_da = this_line.scan(/[^\d-](\d\d?)[:\.](\d\d)-(\d\d?)[:\.](\d\d)(am|pm)?[\s$]/i)
         time_parts = time_parts_da[0]
+        puts "    - time_spec type 1: #{time_parts}" if $verbose > 1
+        start_hour = time_parts[4] =~ /pm/i ? time_parts[0].to_i + 12 : time_parts[0].to_i
+        start_mins = time_parts[1].to_i
+        end_hour = time_parts[4] =~ /pm/i ? time_parts[2].to_i + 12 : time_parts[2].to_i
+        end_mins = time_parts[3].to_i
+      elsif this_line =~ /[^\d-]\d\d?[:\.]\d\d(am|pm|AM|PM)?[\s$]/i
+        # times of form '3:15[am|pm]'
+        time_parts_da = this_line.scan(/[^\d-](\d\d?)[:\.](\d\d)(am|pm)?[\s$]/i)
+        time_parts = time_parts_da[0]
+        puts "    - time_spec type 2: #{time_parts}"
         start_hour = time_parts[2] =~ /pm/i ? time_parts[0].to_i + 12 : time_parts[0].to_i
         start_mins = time_parts[1].to_i
-        end_hour = start_hour + 1 # if no end part given, default to a 1-hour duration event
+        end_hour = (start_hour + 1).modulo(24) # cope with event crossing midnight
         end_mins = start_mins
       elsif this_line =~ /[^\d-]\d\d?(am|pm)[\s$]/i
-        # times of form '3am|pm'
+        # times of form '3am|PM'
         time_parts_da = this_line.scan(/[^\d-](\d\d?)(am|pm)[\s$]/i)
         time_parts = time_parts_da[0]
+        puts "    - time_spec type 3: #{time_parts}" if $verbose > 1
         start_hour = time_parts[1] =~ /pm/i ? time_parts[0].to_i + 12 : time_parts[0].to_i
         start_mins = 0
-        end_hour = start_hour + 1 # if no end part given, default to a 1-hour duration event
-        end_mins = 0
-      elsif this_line =~ /[^\d-]\d\d?-\d\d?[\s$]/i
-        # times of form '3-5', implied 24-hour clock
-        time_parts_da = this_line.scan(/[^\d-](\d\d?)-(\d\d?)[\s$]/i)
-        time_parts = time_parts_da[0]
-        start_hour = time_parts[0].to_i
-        start_mins = 0
-        end_hour = time_parts[1].to_i
+        end_hour = (start_hour + 1).modulo(24) # cope with event crossing midnight
         end_mins = 0
       elsif this_line =~ /[^\d-]\d\d?-\d\d?(am|pm)[\s$]/i
         # times of form '3-5am|pm'
         time_parts_da = this_line.scan(/[^\d-](\d\d?)-(\d\d?)(am|pm)[\s$]/i)
         time_parts = time_parts_da[0]
+        puts "    - time_spec type 4: #{time_parts}" if $verbose > 1
         start_hour = time_parts[2] =~ /pm/i ? time_parts[0].to_i + 12 : time_parts[0].to_i
         start_mins = 0
         end_hour = time_parts[2] =~ /pm/i ? time_parts[1].to_i + 12 : time_parts[1].to_i
         end_mins = 0
-      elsif this_line =~ /[^\d-]\d\d?:\d\d-\d\d?:\d\d(am|pm)?[\s$]/i
-        # times of form '3:00-4:00[am|pm]'
-        time_parts_da = this_line.scan(/[^\d-](\d\d?):(\d\d)-(\d\d?):(\d\d)(am|pm)?[\s$]/i)
+      elsif this_line =~ /[^\d-]\d\d?-\d\d?[\s$]/i
+        # times of form '3-5', implied 24-hour clock
+        time_parts_da = this_line.scan(/[^\d-](\d\d?)-(\d\d?)[\s$]/i)
         time_parts = time_parts_da[0]
-        start_hour = time_parts[4] =~ /pm/i ? time_parts[0].to_i + 12 : time_parts[0].to_i
-        start_mins = time_parts[1].to_i
-        end_hour = time_parts[4] =~ /pm/i ? time_parts[2].to_i + 12 : time_parts[2].to_i
-        end_mins = time_parts[3].to_i
+        puts "    - time_spec type 5: #{time_parts}" if $verbose > 1
+        start_hour = time_parts[0].to_i
+        start_mins = 0
+        end_hour = time_parts[1].to_i
+        end_mins = 0
       else
         # warn as can't find suitable time String
         puts "  - want to create '#{event_title}' event through #create_event, but cannot find suitable time spec".colorize(WarningColour)
@@ -309,10 +316,16 @@ class NPFile
       # create start and end datetime formats to use in applescript
       start_dt = DateTime.new(event_date_s[0..3].to_i, event_date_s[4..5].to_i, event_date_s[6..7].to_i, start_hour, start_mins, 0)
       end_dt   = DateTime.new(event_date_s[0..3].to_i, event_date_s[4..5].to_i, event_date_s[6..7].to_i, end_hour, end_mins, 0)
+      # deal with special case of event crossing midnight, where we need to add 1 day to end_dt
+      if end_dt < start_dt
+        puts "  - found special case of crossing midnight:"
+        print "    #{start_dt} - #{end_dt} "
+        end_dt += 1
+        puts " --> #{end_dt}"
+      end
       start_dt_s = start_dt.strftime(DATE_TIME_APPLESCRIPT_FORMAT)
       end_dt_s   = end_dt.strftime(DATE_TIME_APPLESCRIPT_FORMAT)
       puts "  - will create event '#{event_title}' from #{start_dt_s} to #{end_dt_s}"
-      puts "    (time_parts:#{time_parts})" if $verbose > 1
 
       # use ' at X...' to set the_location (rather than that type of timeblocking)
       the_location = this_line =~ /\sat\s.*/ ? this_line.scan(/\sat\s(.*)/).join : ''
@@ -495,7 +508,7 @@ class NPFile
         # no existing note was found with this title, so create it and add this text to it
         puts "  - warning: can't find matching note for [[#{noteName}]] -- so will create it".colorize(InfoColour)
         ext = @filename.scan(/\.(.+?)$/).join('')
-        create_new_empty_file(noteName, ext) # TODO: ideally find a way to have multiple initialisers
+        create_new_empty_file(noteName, ext) # ideally find a way to have multiple initialisers, rather than this which is a bit of a hack
         # now find the id of this newly-created NPFile
         noteToAddTo = $npfile_count
         # f = $allNotes[noteToAddTo].filename # found that f wasn't being used, so commented out
@@ -599,14 +612,14 @@ class NPFile
     while n < searchLineLimit
       n += 1
       line = @lines[n]
-      next unless line =~ /\*\s+\[x\]/ # TODO change for different task markers
+      next unless line =~ /\*\s+\[x\]/ # TODO: change for different task markers
 
       # save this line number
       doneToMove.push(n)
       # and look ahead to see how many lines to move -- all until blank or starting # or *
       linesToMove = 0
       while n < @line_count
-        break if (@lines[n + 1] =~ /^(#+\s+|\*\s+)/) || (@lines[n + 1] =~ /^\s*$/) # TODO change for different task markers
+        break if (@lines[n + 1] =~ /^(#+\s+|\*\s+)/) || (@lines[n + 1] =~ /^\s*$/) # TODO: change for different task markers
 
         linesToMove += 1
         n += 1
@@ -662,7 +675,7 @@ class NPFile
     while n < searchLineLimit
       n += 1
       line = @lines[n]
-      next unless line =~ /\*\s*\[\-\]/ # TODO change for different task markers
+      next unless line =~ /\*\s*\[\-\]/ # TODO: change for different task markers
 
       # save this line number
       cancToMove.push(n)
@@ -670,7 +683,7 @@ class NPFile
       linesToMove = 0
       while n < @line_count
         linesToMove += 1
-        break if (@lines[n + 1] =~ /^(#+\s+|\*\s+)/) || (@lines[n + 1] =~ /^\s*$/) # TODO change for different task markers
+        break if (@lines[n + 1] =~ /^(#+\s+|\*\s+)/) || (@lines[n + 1] =~ /^\s*$/) # TODO: change for different task markers
 
         n += 1
       end
@@ -721,35 +734,9 @@ class NPFile
     @is_updated = true
   end
 
-  def calc_offset_date(old_date, interval)
-    # Calculate next review date, assuming:
-    # - old_date is type
-    # - interval is string of form nn[bdwmq]
-    # puts "    c_o_d: old #{old_date} interval #{interval} ..."
-    days_to_add = 0
-    unit = interval[-1] # i.e. get last characters
-    num = interval.chop.to_i
-    case unit
-    when 'd'
-      days_to_add = num
-    when 'w'
-      days_to_add = num * 7
-    when 'm'
-      days_to_add = num * 30
-    when 'q'
-      days_to_add = num * 90
-    when 'y'
-      days_to_add = num * 365
-    else
-      puts "    Error in calc_offset_date from #{old_date} by #{interval}".colorize(WarningColour)
-    end
-    puts "    c_o_d: with #{old_date} interval #{interval} found #{days_to_add} days_to_add" if $verbose > 1
-    newDate = old_date + days_to_add
-    newDate
-  end
-
   def use_template_dates
     # Take template dates and turn into real dates
+
     puts '  use_template_dates ...' if $verbose > 1
     date_string = ''
     current_target_date = ''
@@ -791,26 +778,28 @@ class NPFile
       break if last_was_template
 
       # find lines with {+3d} or {-4w} etc. plus {0d} special case
+      # NB: this only deals with the first on any line; it doesn't make sense to have more than one.
       date_offset_string = ''
       if line =~ /\{[\+\-]?\d+[bdwm]\}/
         puts "    - Found line '#{line.chomp}'" if $verbose > 1
         line.scan(/\{([\+\-]?\d+[bdwm])\}/) { |m| date_offset_string = m.join }
         if date_offset_string != ''
-          puts "    - Found DOS #{date_offset_string} in '#{line.chomp}' and last_was_template=#{last_was_template}" if $verbose > 1
+          puts "      - Found DOS #{date_offset_string} in '#{line.chomp}' and last_was_template=#{last_was_template}" if $verbose > 1
           if current_target_date != ''
             begin
               calc_date = calc_offset_date(Date.parse(current_target_date), date_offset_string)
-            rescue
-              puts "    Error while parsing date '#{current_target_date}' for #{date_offset_string}".colorize(WarningColour)
+            rescue StandardError => e
+              puts "      Error #{e.exception.message} while parsing date '#{current_target_date}' for #{date_offset_string}".colorize(WarningColour)
             end
             # Remove the offset text (e.g. {-3d}) by finding string points
-            label_start = line.index('{') - 1
-            label_end = line.index('}') + 2
-            line = "#{line[0..label_start]}#{line[label_end..-2]}" # also chomp off last character (newline)
+            label_start = line.index('{')
+            label_end = line.index('}')
+            # Create new version with inserted date
+            line = "#{line[0..label_start-1]}>#{calc_date}#{line[label_end+1..]}" # also chomp off last character (newline)
             # then add the new date
-            line += ">#{calc_date}"
+            # line += ">#{calc_date}"
             @lines[n] = line
-            puts "      -> Used #{date_offset_string} line to make '#{line.chomp}'" if $verbose > 1
+            puts "      - In line labels runs #{label_start}-#{label_end} --> '#{line.chomp}'" if $verbose > 1
             @is_updated = true
             @line_count += 1
           elsif $verbose > 0
@@ -895,21 +884,20 @@ class NPFile
   end
 
   def remove_empty_header_sections
-    # go backwards through the note, deleting any sections without content
+    # go backwards through the active part of the note, deleting any sections without content
     puts '  remove_empty_header_sections ...' if $verbose > 1
     cleaned = 0
-    n = @line_count - 1
+    n = @done_header - 1
     # Go through each line in the file
     later_header_level = this_header_level = 0
     at_eof = 1
     while n.positive? || n.zero? # FIXME: this BMStroh addition killing some note titles?
       line = @lines[n]
       # find header lines
-      # puts "  - #{n}: '#{line.chomp}'"
       if line =~ /^#+\s\w/
         # this is a header line
         line.scan(/^(#+)\s/) { |m| this_header_level = m[0].length }
-        # puts "    - #{later_header_level} / #{this_header_level}"
+        puts "    - #{later_header_level} / #{this_header_level}" if $verbose > 1
         # if later header is same or higher level (fewer #s) as this,
         # then we can delete this line
         if later_header_level >= this_header_level || at_eof == 1
@@ -1108,7 +1096,7 @@ end
 
 #--------------------------------------------------------------------------------------
 if $notes.count.positive? # if we have some files to work on ...
-  puts "\nFound #{$notes.count} files to process:" if $verbose > 0
+  puts "\nProcessing #{$notes.count} files:" if $verbose > 0
   # For each NP file to process, do the following:
   $notes.sort! { |a, b| a.title <=> b.title }
   $notes.each do |note|
