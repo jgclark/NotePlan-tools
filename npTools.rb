@@ -1,7 +1,7 @@
 #!/usr/bin/ruby
 #-------------------------------------------------------------------------------
 # NotePlan Tools script
-# by Jonathan Clark, v1.9.0, 15.1.2021
+# by Jonathan Clark, v1.9.0, 16.1.2021
 #-------------------------------------------------------------------------------
 # See README.md file for details, how to run and configure it.
 # Repository: https://github.com/jgclark/NotePlan-tools/
@@ -17,7 +17,7 @@ require 'optparse' # more details at https://docs.ruby-lang.org/en/2.1.0/OptionP
 #-------------------------------------------------------------------------------
 # Setting variables to tweak
 #-------------------------------------------------------------------------------
-HOURS_TO_PROCESS = 24 # by default will process all files changed within this number of hours
+HOURS_TO_PROCESS = 72 # by default will process all files changed within this number of hours
 NUM_HEADER_LINES = 3 # suits my use, but probably wants to be 1 for most people
 TAGS_TO_REMOVE = ['#waiting', '#high'].freeze # simple array of strings
 DATE_TIME_LOG_FORMAT = '%e %b %Y %H:%M'.freeze # only used in logging
@@ -226,7 +226,7 @@ class NPFile
     #   '- clear before meeting 2:00-2:30pm #create_event' --> caledar event 2-2:30pm
     puts '  create_events_from_timeblocks ...' if $verbose > 1
     n = 0
-    while n < @line_count
+    while n < (@done_header.positive? ? @done_header : @line_count)
       this_line = @lines[n]
       unless this_line =~ /#{CREATE_EVENT_TAG_TO_USE}/
         n += 1
@@ -743,8 +743,9 @@ class NPFile
     calc_date = ''
     last_was_template = false
     n = 0
-    # Go through each line in the file
-    @lines.each do |line|
+    # Go through each line in the active part of the file
+    while n < (@done_header.positive? ? @done_header : @line_count)
+      line = @lines[n]
       date_string = ''
       # look for base date, of form YYYY-MM-DD and variations and whatever RE_DATE_FORMAT_CUSTOM gives
       if line =~ /^#+\s/
@@ -754,18 +755,20 @@ class NPFile
       end
 
       # Try matching for the standard YYYY-MM-DD date pattern
-      line.scan(/[^\d\(<>](#{RE_YYYY_MM_DD})/) { |m| date_string = m.join }
+      # (though check it's not got various characters before it, to defeat common usage in middle of things like URLs)
+      line.scan(/[^\d\(<>\/-](#{RE_YYYY_MM_DD})/) { |m| date_string = m.join }
       if date_string != ''
         # We have a date string to use for any offsets in the following section
         current_target_date = date_string
-        puts "    - Found CTD #{current_target_date} in '#{line.chomp}'" if $verbose > 1
+        puts "    - Found CTD #{current_target_date}'" if $verbose > 1
       else
         # Try matching for the custom date pattern, configured at the top
-        line.scan(/[^\d\(<>](#{RE_DATE_FORMAT_CUSTOM})/) { |m| date_string = m.join }
+        # (though check it's not got various characters before it, to defeat common usage in middle of things like URLs)
+        line.scan(/[^\d\(<>\/-](#{RE_DATE_FORMAT_CUSTOM})/) { |m| date_string = m.join }
         if date_string != ''
           # We have a date string to use for any offsets in the following section
           current_target_date = date_string
-          puts "    - Found CTD #{current_target_date} in '#{line.chomp}'" if $verbose > 1
+          puts "    - Found CTD #{current_target_date}'" if $verbose > 1
         end
       end
       if line =~ /#template/
@@ -784,7 +787,7 @@ class NPFile
         puts "    - Found line '#{line.chomp}'" if $verbose > 1
         line.scan(/\{([\+\-]?\d+[bdwm])\}/) { |m| date_offset_string = m.join }
         if date_offset_string != ''
-          puts "      - Found DOS #{date_offset_string} in '#{line.chomp}' and last_was_template=#{last_was_template}" if $verbose > 1
+          puts "      - Found DOS #{date_offset_string}' and last_was_template=#{last_was_template}" if $verbose > 1
           if current_target_date != ''
             begin
               calc_date = calc_offset_date(Date.parse(current_target_date), date_offset_string)
@@ -828,8 +831,9 @@ class NPFile
     puts '  process_repeats_and_done ...' if $verbose > 1
     n = cleaned = 0
     outline = ''
-    # Go through each line in the file
-    @lines.each do |line|
+    # Go through each line in the active part of the file
+    while n < (@done_header != 0 ? @done_header : @line_count)
+      line = @lines[n]
       updated_line = ''
       completed_date = ''
       # find lines with date-time to shorten, and capture date part of it
@@ -887,20 +891,20 @@ class NPFile
     # go backwards through the active part of the note, deleting any sections without content
     puts '  remove_empty_header_sections ...' if $verbose > 1
     cleaned = 0
-    n = @done_header - 1
+    n = @done_header != 0 ? @done_header - 1 : @line_count - 1
+
     # Go through each line in the file
     later_header_level = this_header_level = 0
     at_eof = 1
     while n.positive? || n.zero? # FIXME: this BMStroh addition killing some note titles?
       line = @lines[n]
-      # find header lines
       if line =~ /^#+\s\w/
-        # this is a header line
+        # this is a markdown header line; work out what level it is
         line.scan(/^(#+)\s/) { |m| this_header_level = m[0].length }
-        puts "    - #{later_header_level} / #{this_header_level}" if $verbose > 1
+        # puts "    - #{later_header_level} / #{this_header_level}" if $verbose > 1
         # if later header is same or higher level (fewer #s) as this,
         # then we can delete this line
-        if later_header_level >= this_header_level || at_eof == 1
+        if later_header_level == this_header_level || at_eof == 1
           puts "    - Removing empty header line #{n} '#{line.chomp}'" if $verbose > 1
           @lines.delete_at(n)
           cleaned += 1
@@ -923,10 +927,10 @@ class NPFile
   end
 
   def remove_multiple_empty_lines
-    # go backwards through the note, deleting any blanks at the end
+    # go backwards through the active parts of the note, deleting any blanks at the end
     puts '  remove_multiple_empty_lines ...' if $verbose > 1
     cleaned = 0
-    n = @line_count - 1
+    n = (@done_header != 0 ? @done_header - 1 : @line_count - 1)
     last_was_empty = false
     while n.positive?
       line_to_test = @lines[n]

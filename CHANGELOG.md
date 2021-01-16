@@ -1,8 +1,10 @@
 # CHANGELOG
 
-## v1.9.0, 15.1.2021
+## v1.9.0, 16.1.2021
 - [Improve] Allow more types of time spec when creating events (e.g. "2.45PM" or "3.15-5.00"
+- [Improve] For template dates be more discriminating about where to find dates to match on, so now ignores dates embedded in certain URLs.
 - [Fix] spacing around processed template dates (e.g. {3d})
+- [Fix] removing headers with empty sections now won't remove header if next content is a lower-level header
 - [Clean up] Remove some obsolete code and add some more logging
 
 ## v1.8.6 8.1.2021
