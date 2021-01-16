@@ -18,8 +18,8 @@ require 'optparse' # more details at https://docs.ruby-lang.org/en/2.1.0/OptionP
 # Setting variables to tweak
 #-------------------------------------------------------------------------------
 hours_to_process = 24 # by default will process all files changed within this number of hours
-NUM_HEADER_LINES = 3 # suits my use, but probably wants to be 1 for most people
-TAGS_TO_REMOVE = ['#waiting', '#high'].freeze # simple array of strings
+NUM_HEADER_LINES = 4 # suits my use, but probably wants to be 1 for most people
+TAGS_TO_REMOVE = ['#waiting', '#high', '#started', '⭐'].freeze # simple array of strings
 DATE_TIME_LOG_FORMAT = '%e %b %Y %H:%M'.freeze # only used in logging
 RE_DATE_FORMAT_CUSTOM = '\d{1,2}[\-\.//][01]?\d[\-\.//]\d{4}'.freeze # regular expression of alternative format used to find dates in templates. This matches DD.MM.YYYY and similar.
 # DATE_TIME_APPLESCRIPT_FORMAT = '%e %b %Y %I:%M %p'.freeze # format for creating Calendar events (via AppleScript) when Region setting is 12-hour clock
@@ -206,7 +206,7 @@ class NPFile
   end
 
   # def self.new2(*args)
-  #   # TODO: Use API instead?
+  #   # TODO: Use NotePlan's addNote via x-callback-url instead?
   #   # This is a second initializer, to create a new empty file, so have to use a different syntax.
   #   # Create empty NPFile object, and then pass to detailed initializer
   #   object = allocate
@@ -408,19 +408,22 @@ class NPFile
     puts '  remove_unwanted_tags_dates ...' if $verbose > 1
     n = cleaned = 0
     while n < @line_count
-      # remove any <YYYY-MM-DD on completed or cancelled tasks
-      if $remove_scheduled == 1
-        if (@lines[n] =~ /\s<\d{4}\-\d{2}\-\d{2}/) && (@lines[n] =~ /\[(x|-)\]/)
-          @lines[n].gsub!(/\s<\d{4}\-\d{2}\-\d{2}/, '')
-          cleaned += 1
+      # only do something if this is a completed or cancelled task
+      if @lines[n] =~ /\[(x|-)\]/
+        # remove any <YYYY-MM-DD on completed or cancelled tasks
+        if $remove_scheduled == 1
+          if (@lines[n] =~ /\s<\d{4}\-\d{2}\-\d{2}/)
+            @lines[n].gsub!(/\s<\d{4}\-\d{2}\-\d{2}/, '')
+            cleaned += 1
+          end
         end
-      end
 
-      # Remove any tags from the TagsToRemove list. Iterate over that array:
-      TAGS_TO_REMOVE.each do |tag|
-        if (@lines[n] =~ /#{tag}/) && (@lines[n] =~ /\[(x|-)\]/)
-          @lines[n].gsub!(/ #{tag}/, '')
-          cleaned += 1
+        # Remove any tags from the TagsToRemove list. Iterate over that array:
+        TAGS_TO_REMOVE.each do |tag|
+          if (@lines[n] =~ /#{tag}/)
+            @lines[n].gsub!(/ #{tag}/, '')
+            cleaned += 1
+          end
         end
       end
       n += 1
@@ -759,7 +762,7 @@ class NPFile
       if date_string != ''
         # We have a date string to use for any offsets in the following section
         current_target_date = date_string
-        puts "    - Found CTD #{current_target_date}'" if $verbose > 1
+        puts "    - Found CTD #{current_target_date}" if $verbose > 1
       else
         # Try matching for the custom date pattern, configured at the top
         # (though check it's not got various characters before it, to defeat common usage in middle of things like URLs)
@@ -767,7 +770,7 @@ class NPFile
         if date_string != ''
           # We have a date string to use for any offsets in the following section
           current_target_date = date_string
-          puts "    - Found CTD #{current_target_date}'" if $verbose > 1
+          puts "    - Found CTD #{current_target_date}" if $verbose > 1
         end
       end
       if line =~ /#template/
@@ -776,36 +779,35 @@ class NPFile
         puts "    . Found #template in '#{line.chomp}'" if $verbose > 1
       end
 
-      # ignore line if last_was_template
-      break if last_was_template
-
-      # find lines with {+3d} or {-4w} etc. plus {0d} special case
-      # NB: this only deals with the first on any line; it doesn't make sense to have more than one.
-      date_offset_string = ''
-      if line =~ /\{[\+\-]?\d+[bdwm]\}/
-        puts "    - Found line '#{line.chomp}'" if $verbose > 1
-        line.scan(/\{([\+\-]?\d+[bdwm])\}/) { |m| date_offset_string = m.join }
-        if date_offset_string != ''
-          puts "      - Found DOS #{date_offset_string}' and last_was_template=#{last_was_template}" if $verbose > 1
-          if current_target_date != ''
-            begin
-              calc_date = calc_offset_date(Date.parse(current_target_date), date_offset_string)
-            rescue StandardError => e
-              puts "      Error #{e.exception.message} while parsing date '#{current_target_date}' for #{date_offset_string}".colorize(WarningColour)
+      # ignore line if we're in a template section (last_was_template is true)
+      if !last_was_template
+        # find lines with {+3d} or {-4w} etc. plus {0d} special case
+        # NB: this only deals with the first on any line; it doesn't make sense to have more than one.
+        date_offset_string = ''
+        if line =~ /\{[\+\-]?\d+[bdwm]\}/
+          puts "    - Found line '#{line.chomp}'" if $verbose > 1
+          line.scan(/\{([\+\-]?\d+[bdwm])\}/) { |m| date_offset_string = m.join }
+          if date_offset_string != ''
+            puts "      - Found DOS #{date_offset_string}' and last_was_template=#{last_was_template}" if $verbose > 1
+            if current_target_date != ''
+              begin
+                calc_date = calc_offset_date(Date.parse(current_target_date), date_offset_string)
+              rescue StandardError => e
+                puts "      Error #{e.exception.message} while parsing date '#{current_target_date}' for #{date_offset_string}".colorize(WarningColour)
+              end
+              # Remove the offset text (e.g. {-3d}) by finding string points
+              label_start = line.index('{')
+              label_end = line.index('}')
+              # Create new version with inserted date
+              line = "#{line[0..label_start-1]}>#{calc_date}#{line[label_end+1..]}" # also chomp off last character (newline)
+              # then add the new date
+              # line += ">#{calc_date}"
+              @lines[n] = line
+              puts "      - In line labels runs #{label_start}-#{label_end} --> '#{line.chomp}'" if $verbose > 1
+              @is_updated = true
+            elsif $verbose > 0
+              puts "    Warning: have an offset date, but no current_target_date before line '#{line.chomp}'".colorize(WarningColour)
             end
-            # Remove the offset text (e.g. {-3d}) by finding string points
-            label_start = line.index('{')
-            label_end = line.index('}')
-            # Create new version with inserted date
-            line = "#{line[0..label_start-1]}>#{calc_date}#{line[label_end+1..]}" # also chomp off last character (newline)
-            # then add the new date
-            # line += ">#{calc_date}"
-            @lines[n] = line
-            puts "      - In line labels runs #{label_start}-#{label_end} --> '#{line.chomp}'" if $verbose > 1
-            @is_updated = true
-            @line_count += 1
-          elsif $verbose > 0
-            puts "    Warning: have an offset date, but no current_target_date before line '#{line.chomp}'".colorize(WarningColour)
           end
         end
       end
@@ -895,7 +897,7 @@ class NPFile
     # Go through each line in the file
     later_header_level = this_header_level = 0
     at_eof = 1
-    while n.positive? || n.zero? # FIXME: this BMStroh addition killing some note titles?
+    while n.positive? || n.zero?
       line = @lines[n]
       if line =~ /^#+\s\w/
         # this is a markdown header line; work out what level it is
