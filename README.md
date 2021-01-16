@@ -92,6 +92,7 @@ There are 2 ways of running the script:
 You can also specify **options**:
 - `-h` for help, 
 - `-a` (`--noarchive`) don't archive completed tasks into the `# Done` section. _This is currently on by default, as the feature isn't yet complete to my satisfaction._
+- `c` (`--changes HOURS`) how many hours to look back to find note changes to process, overriding the default of 24 hours (though this can be changed; see below)
 - `-n` (`--nomove`) turn off moving mentions of [[Note]] in a daily calendar day file to the [[Note]]. You'll want to do this if you're using the [[...]] notation for backlinks (from NP v3.0.15 onwards)
 - `-q` (`--quiet`) suppress all output, other than error messages
 - `-s` (`--keepschedules`) keep the scheduled (>) dates of completed tasks
@@ -110,7 +111,7 @@ It works with all 3 storage options for storing NotePlan data: CloudKit (the def
 3. Download and copy the script to a place where it can be found on your FILE filepath (perhaps `sudo cp npTools.rb /usr/local/bin/`)
 4. Make the script executable (`chmod 755 npTools.rb`)
 5. Change the following constants at the top of the script, as required:
-- `HOURS_TO_PROCESS`: will process all files changed within this number of hours (default 24)
+- `hours_to_process`: will process all files changed within this number of hours (default 24)
 - `NUM_HEADER_LINES`: number of lines at the start of a note file to regard as the header. The default is 1. Relevant when moving lines around.
 - `TAGS_TO_REMOVE`: list of tags to remove. Default ["#waiting","#high"]
 - `DATE_TIME_LOG_FORMAT`: date string format to use in logs

@@ -1,6 +1,7 @@
 # CHANGELOG
 
 ## v1.9.0, 16.1.2021
+- [Add] Command line option `-c` to override how many hours to look back to find changed notes to process
 - [Improve] Allow more types of time spec when creating events (e.g. "2.45PM" or "3.15-5.00"
 - [Improve] For template dates be more discriminating about where to find dates to match on, so now ignores dates embedded in certain URLs.
 - [Fix] spacing around processed template dates (e.g. {3d})

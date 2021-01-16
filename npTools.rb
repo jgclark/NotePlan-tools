@@ -17,12 +17,11 @@ require 'optparse' # more details at https://docs.ruby-lang.org/en/2.1.0/OptionP
 #-------------------------------------------------------------------------------
 # Setting variables to tweak
 #-------------------------------------------------------------------------------
-HOURS_TO_PROCESS = 72 # by default will process all files changed within this number of hours
+hours_to_process = 24 # by default will process all files changed within this number of hours
 NUM_HEADER_LINES = 3 # suits my use, but probably wants to be 1 for most people
 TAGS_TO_REMOVE = ['#waiting', '#high'].freeze # simple array of strings
 DATE_TIME_LOG_FORMAT = '%e %b %Y %H:%M'.freeze # only used in logging
 RE_DATE_FORMAT_CUSTOM = '\d{1,2}[\-\.//][01]?\d[\-\.//]\d{4}'.freeze # regular expression of alternative format used to find dates in templates. This matches DD.MM.YYYY and similar.
-DATE_TODAY_FORMAT = '%Y%m%d'.freeze # using this to identify the "today" daily note
 # DATE_TIME_APPLESCRIPT_FORMAT = '%e %b %Y %I:%M %p'.freeze # format for creating Calendar events (via AppleScript) when Region setting is 12-hour clock
 DATE_TIME_APPLESCRIPT_FORMAT = '%e %b %Y %H:%M:%S'.freeze # format for creating Calendar events (via AppleScript) when Region setting is 24-hour clock
 CALENDAR_APP_TO_USE = 'Calendar' # Name of Calendar app to use in create_event AppleScript. Default is 'Calendar'.
@@ -32,13 +31,13 @@ CREATE_EVENT_TAG_TO_USE = '#create_event' # customise if you want a different ta
 #-------------------------------------------------------------------------------
 # Other Constants & Settings
 #-------------------------------------------------------------------------------
+DATE_TODAY_FORMAT = '%Y%m%d'.freeze # using this to identify the "today" daily note
 RE_YYYY_MM_DD = '\d{4}[\-\.//][01]?\d[\-\.//]\d{1,2}' # built-in format for finding dates of form YYYY-MM-DD and similar
 USERNAME = ENV['LOGNAME'] # pull username from environment
 USER_DIR = ENV['HOME'] # pull home directory from environment
 DROPBOX_DIR = "#{USER_DIR}/Dropbox/Apps/NotePlan/Documents".freeze
 ICLOUDDRIVE_DIR = "#{USER_DIR}/Library/Mobile Documents/iCloud~co~noteplan~NotePlan/Documents".freeze
 CLOUDKIT_DIR = "#{USER_DIR}/Library/Containers/co.noteplan.NotePlan3/Data/Library/Application Support/co.noteplan.NotePlan3".freeze
-# TodaysDate = Date.today # can't work out why this needs to be a 'constant' to work -- something about visibility, I suppose
 np_base_dir = DROPBOX_DIR if Dir.exist?(DROPBOX_DIR) && Dir[File.join(DROPBOX_DIR, '**', '*')].count { |file| File.file?(file) } > 1
 np_base_dir = ICLOUDDRIVE_DIR if Dir.exist?(ICLOUDDRIVE_DIR) && Dir[File.join(ICLOUDDRIVE_DIR, '**', '*')].count { |file| File.file?(file) } > 1
 np_base_dir = CLOUDKIT_DIR if Dir.exist?(CLOUDKIT_DIR) && Dir[File.join(CLOUDKIT_DIR, '**', '*')].count { |file| File.file?(file) } > 1
@@ -985,21 +984,24 @@ opt_parser = OptionParser.new do |opts|
   options[:skiptoday] = false
   options[:quiet] = false
   options[:verbose] = 0
-  opts.on('-a', '--noarchive', "Don't archive completed tasks into the ## Done section") do
+  opts.on('-a', '--noarchive', "Don't archive completed tasks into the ## Done section. Turned on by default at the moment.") do
     options[:archive] = 0
   end
-  opts.on('-h', '--help', 'Show this help') do
+  opts.on('-c', '--changes HOURS', Integer, "How many hours to look back to find note changes to process") do |n|
+    hours_to_process = n
+  end
+  opts.on('-f', '--skipfile=TITLE[,TITLE2,etc]', Array, "Don't process specific file(s)") do |skipfile|
+    options[:skipfile] = skipfile
+  end
+  opts.on('-h', '--help', 'Show this help summary') do
     puts opts
     exit
   end
-  opts.on('-n', '--nomove', "Don't move Daily items with [[Note]] reference to that Note") do
-    options[:move] = 0
-  end
-  opts.on('-f', '--skipfile=TITLE[,TITLE2,TITLE3,etc]', Array, "Don't process specific file(s)") do |skipfile|
-    options[:skipfile] = skipfile
-  end
   opts.on('-i', '--skiptoday', "Don't touch today's daily note file") do
     options[:skiptoday] = true
+  end
+  opts.on('-n', '--nomove', "Don't move Daily items with [[Note]] reference to that Note") do
+    options[:move] = 0
   end
   opts.on('-q', '--quiet', 'Suppress all output, apart from error messages. Overrides -v or -w.') do
     options[:quiet] = true
@@ -1069,10 +1071,10 @@ if ARGV.count.positive?
 
 else
   # Read metadata for all Note files, and find those altered in the last 24 hours
-  puts "Starting npTools at #{time_now_fmttd} for all NP files altered in last #{HOURS_TO_PROCESS} hours." unless $quiet
+  puts "Starting npTools at #{time_now_fmttd} for all NP files altered in last #{hours_to_process} hours." unless $quiet
   begin
     $allNotes.each do |this_note|
-      next unless this_note.modified_time > (time_now - HOURS_TO_PROCESS * 60 * 60)
+      next unless this_note.modified_time > (time_now - hours_to_process * 60 * 60)
 
       # Note has already been read in; so now just find which one to point to
       $notes << this_note
@@ -1088,7 +1090,7 @@ else
       puts "    Checking daily file #{this_file}, updated #{File.mtime(this_file)}, size #{File.size(this_file)}" if $verbose > 1
       next if File.zero?(this_file) # ignore if this file is empty
       # if modified time (mtime) in the last 24 hours
-      next unless File.mtime(this_file) > (time_now - HOURS_TO_PROCESS * 60 * 60)
+      next unless File.mtime(this_file) > (time_now - hours_to_process * 60 * 60)
 
       # read the calendar file in
       $notes << NPFile.new(this_file)
