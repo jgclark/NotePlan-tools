@@ -1,12 +1,12 @@
 #!/usr/bin/ruby
 #-------------------------------------------------------------------------------
 # NotePlan Tools script
-# by Jonathan Clark, v1.9.0, 16.1.2021
+# by Jonathan Clark, v1.9.1, 18.1.2021
 #-------------------------------------------------------------------------------
 # See README.md file for details, how to run and configure it.
 # Repository: https://github.com/jgclark/NotePlan-tools/
 #-------------------------------------------------------------------------------
-VERSION = "1.9.0"
+VERSION = "1.9.1"
 
 require 'date'
 require 'time'
@@ -233,7 +233,7 @@ class NPFile
       end
       # we have a line with one or more events to create
       # get date: if there's a >YYYY-MM-DD mentioned in the line, use that,
-      # otherwise use date of calendar note. Format: YYYYMMDD
+      # otherwise use date of calendar note. Format: YYYYMMDD, or else use today's date.
       event_date_s = ''
       if this_line =~ />\d{4}-\d{2}-\d{2}/
         this_line.scan(/>(\d{4}-\d{2}-\d{2})/) { |m| event_date_s = m.join.tr('-', '') }
@@ -1047,7 +1047,7 @@ if ARGV.count.positive?
       # if pattern has a '.' in it assume it is a full filename ...
       # ... otherwise treat as close to a regex term as possible with Dir.glob
       glob_pattern = pattern =~ /\./ ? pattern : '[!@]**/*' + pattern + '*.{md,txt}'
-      puts "  For glob_pattern #{glob_pattern} found note filenames:" if $verbose > 0
+      puts "  Looking for note filenames matching glob_pattern #{glob_pattern}:" if $verbose > 0
       Dir.glob(glob_pattern).each do |this_file|
         puts "  - #{this_file}" if $verbose > 0
         # Note has already been read in; so now just find which one to point to, by matching filename
@@ -1059,12 +1059,13 @@ if ARGV.count.positive?
 
       # Now look for matches in Daily/Calendar files
       Dir.chdir(NP_CALENDAR_DIR)
-      glob_pattern = '*' + pattern + '*.{md,txt}'
+      # if pattern has a '.' in it assume it is a full filename ...
+      # ... otherwise treat as close to a regex term as possible with Dir.glob
+      glob_pattern = pattern =~ /\./ ? pattern : '*' + pattern + '*.{md,txt}'
+      puts "  Looking for daily note filenames matching glob_pattern #{glob_pattern}:" if $verbose > 0
       Dir.glob(glob_pattern).each do |this_file|
         puts "  - #{this_file}" if $verbose > 0
-        next if File.zero?(this_file) # ignore if this file is empty
-
-        $notes << NPFile.new(this_file)
+        $notes << NPFile.new(this_file) if !File.zero?(this_file) # read in file unless this file is empty
       end
     end
   rescue StandardError => e
@@ -1124,7 +1125,7 @@ if $notes.count.positive? # if we have some files to work on ...
     note.process_repeats_and_done
     note.remove_multiple_empty_lines
     note.move_daily_ref_to_notes if note.is_calendar && options[:move] == 1
-    note.use_template_dates unless note.is_calendar
+    note.use_template_dates #unless note.is_calendar
     note.create_events_from_timeblocks
     note.archive_lines if $archive == 1 # not ready yet
     # If there have been changes, write out the file

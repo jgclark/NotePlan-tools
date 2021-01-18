@@ -48,9 +48,14 @@ In more detail:
 - But you can add another custom date format to use by setting the `RE_DATE_FORMAT_CUSTOM` variable (see below). The dates matched by this regular expression must additionally be caapble of being correctly parsed by ruby's Date.parse() built-in command, over which I have no control.
 
 ### Create new Calendar Events
-NotePlan allows for time-blocking, but this only works to its in-built calendar display. With npTools you also create full events that are visible and editable in Apple Calendar, or any other apps that use iCloud.  To do this use the `#create_event` tag is used on a line (task, comment or heading) with a timeblocking command such as `3:00-3:45[AM|PM]` or `3-5pm` or `3PM` and location such as `at Jim's`. This allows for meeting events to be listed on a day, and also created in the calendar. In combination with the date offset patterns above, it further allows scheduling preparation time days or hours before events.  
+NotePlan allows for time-blocking, but this only works to its in-built calendar display. With npTools you also **create events** that are visible and editable in Apple Calendar, or any other apps that use iCloud, *not just NotePlan*.  To do this use the `#create_event` tag on a line (task, comment or heading) with a timeblocking command such as `3:00-3:45[AM|PM]` or `3-5pm` or `3PM` and optional location such as `at Jim's`. This allows for meeting events to be listed on a day, and also created in the calendar. In combination with the date offset patterns above, it further allows scheduling preparation time (for example) days or hours before events.
 
-For example to create a meeting event:
+The date of the event is determined in this order:
+1. it will use a `>YYYY-MM-DD` mentioned in the line. NB:  date offset patterns get calculated before it looks to create events.
+2. if it's a calendar note, then use that date
+3. otherwise use today's date.
+
+For example to create a meeting event for a certain day put this in it's daily (calendar) note:
 ```
 ### Project X Meeting #create_event 10:30am at Jim's
 ```
@@ -65,6 +70,7 @@ To extend this and use the date templates, add a timed task with calendar entry 
 ![Video showing event creation](npTools-create_event.gif)
 
 Notes on this:
+- If no date is given on the line, and 
 - If no finish time is set, then the event defaults to an hour.
 - You can use the shortcut `3PM` or `3-5PM` when you don't need to specify the minutes -- though NotePlan itself currently doesn't recognise this syntax for time blocks. You can specify minutes as well either using `3:45` or `3.15` formats.
 - If am/AM or pm/PM isn't given, then the hours are assumed to be in 24-hour clock

@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## v1.9.1, 18.1.2021
+- [Fix] Fixed bug in file-matching logic [thanks to Dimitry for reporting]
+- [Fix] Fixed bug that stopped date pattern matching in calendar files [thanks to Dimitry for reporting]
+- [Improve] Clarified the README for how dates are defined when using #create_event.
+
 ## v1.9.0, 16.1.2021
 - [Add] Command line option `-c` to override how many hours to look back to find changed notes to process
 - [Improve] Allow more types of time spec when creating events (e.g. "2.45PM" or "3.15-5.00"
