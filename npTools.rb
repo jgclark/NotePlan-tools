@@ -965,7 +965,7 @@ class NPFile
         end
       end
     rescue StandardError => e
-      puts "ERROR: #{e.exception.message} when re-writing note file #{filpath}".colorize(WarningColour)
+      puts "ERROR: #{e.exception.message} when re-writing note file #{filepath}".colorize(WarningColour)
     end
   end
 end
