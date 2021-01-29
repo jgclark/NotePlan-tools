@@ -123,7 +123,7 @@ begin
       # replace a line just surrounded by **...** with an H4 instead
       line.gsub!(/^\s*\*\*(.*)\*\*\s*$/, '#### \1')
       # replace asterisk lists with dash lists (to stop NP thinking they are tasks)
-      line.gsub!(/^(\s*)\*\s/, '\1-')
+      line.gsub!(/^(\s*)\*\s/, '\1- ')
 
       puts "  #{n}: #{line_in.chomp}\n   -> #{line}" if $verbose && line_in != line
 
