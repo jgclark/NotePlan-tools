@@ -37,9 +37,9 @@ DATE_TIME_APPEND_FORMAT = '%Y%m%d%H%M'.freeze
 # February 1, 2021 at 04:04PM \\ In what ways can we form useful relationships between notes? \\ https://ift.tt/3aT3LS3 \\ "Nick Milo Aug 8, 2020 · 7 min read Are you into personal knowledge management PKM)? Are you confused about when to use a folder versus a tag versus a link…"
 # END_I_DATA
 
-twitter_test_data = <<-END_T_DATA
-January 24, 2021 at 03:56PM | A useful thread which highlights the problems of asking the wrong question. https://t.co/xEKimf9cLK | jgctweets | http://twitter.com/jgctweets/status/1353371090609909760
-END_T_DATA
+# twitter_test_data = <<-END_T_DATA
+# January 24, 2021 at 03:56PM | A useful thread which highlights the problems of asking the wrong question. https://t.co/xEKimf9cLK | jgctweets | http://twitter.com/jgctweets/status/1353371090609909760
+# END_T_DATA
 
 #-------------------------------------------------------------------------------
 # Other Constants & Settings
@@ -189,7 +189,7 @@ catch (:done) do  # provide a clean way out of this
       lines_to_add = ''
 
       # Format line to add
-      line_to_add = "- new #spotify fave **#{parts[1].strip}**'s [#{parts[2].strip}](#{parts[4].strip}) from album **#{parts[3].strip}**\n![album art](#{parts[5].strip})"
+      line_to_add = "- new #spotify fave **#{parts[1].strip}**'s [#{parts[2].strip}](#{parts[4].strip}) from album **#{parts[3].strip}** ![album art](#{parts[5].strip})"
       puts line_to_add if $verbose
 
       # Read in the NP Calendar file for this date
@@ -200,7 +200,7 @@ catch (:done) do  # provide a clean way out of this
         this_note.append_media_header
         this_note.insert_new_line(line_to_add, this_note.media_header_line + 1)
       else
-        this_note.insert_new_line(line_to_add, this_note.line_count + 1)
+        this_note.insert_new_line(line_to_add, this_note.line_count)
       end
       this_note.rewrite_cal_file
       puts "-> Saved new Spotify fave to #{date_YYYYMMDD}".colorize(CompletedColour)
@@ -263,7 +263,7 @@ catch (:done) do  # provide a clean way out of this
         this_note.append_media_header
         this_note.insert_new_line(line_to_add, this_note.media_header_line + 1)
       else
-        this_note.insert_new_line(line_to_add, this_note.line_count + 1)
+        this_note.insert_new_line(line_to_add, this_note.line_count)
       end
       this_note.rewrite_cal_file
       puts "-> Saved new Instapaper item to #{date_YYYYMMDD}".colorize(CompletedColour)
