@@ -132,7 +132,9 @@ It works with all 3 storage options for storing NotePlan data: CloudKit (the def
 The first time you attempt to `#create_event`, macOS (at least Catalina and Big Sur) will probably ask for permission to update your Calendar.
 
 ### Automatic running
-If you wish to run this automatically in the background on macOS, you can do this using the built-in `launchctl` system. Here's the configuration file `jgc.npTools.plist` that I use to automatically run `npTools.rb` several times a day:
+If you wish to run this automatically in the background on macOS, you can do this using the built-in `launchctl` system. (For more info on this see for example [How to Use launchd to Run Services in macOS](https://medium.com/swlh/how-to-use-launchd-to-run-services-in-macos-b972ed1e352).)
+
+Here's the configuration file `jgc.npTools.plist` that I use to automatically run `npTools.rb` several times a day:
 ```
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
