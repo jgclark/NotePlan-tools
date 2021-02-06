@@ -1,9 +1,9 @@
 #!/usr/bin/ruby
 #-------------------------------------------------------------------------------
-# Script to tidy and clean up HTML text clipped into markdown files 
-# by Jonathan Clark, v1.0.0, 29.1.2021
+# Script to tidy and clean up HTML text clipped into markdown files
+# by Jonathan Clark, v1.1.0, 6.2.2021
 #-------------------------------------------------------------------------------
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 require 'date'
 require 'cgi'
 require 'colorize'
@@ -83,17 +83,31 @@ begin
 
     # initialise other variables (that don't need to persist with the class)
     n = 0
+    ignore_before = 0
+    ignore_after = 99999 # very long file!
     lines = []
     # Open file and read in all lines (finding any Done and Cancelled headers)
     # NB: needs the encoding line when run from launchctl, otherwise you get US-ASCII invalid byte errors (basically the 'locale' settings are different)
     f = File.open(this_file, 'r', encoding: 'utf-8')
     f.each_line do |line|
-    lines[n] = line
+      lines[n] = line
       # puts " #{n}: #{line}" if $verbose
-      line_in = line.clone  # need a proper clone, not just a reference
+      line_in = line.clone  # needs a proper clone, not just a reference
+
+      # make a note if this is the first H1 in the file
+      ignore_before = n if line_in =~ /^#\s/
+
+      # make a note if this is the first H1 in the file
+      ignore_after = n if line_in =~ /^\s*\d*\s*Comments/
 
       # Delete #clipped or #popclipped references at start of a line
-      lines.delete_at(n) if line =~ /^#popclipped$/i || line =~ /^#clipped$/i
+      if line =~ /^#popclipped$/i || line =~ /^#clipped$/i
+        lines.delete_at(n)
+        line = ''
+      end
+
+      # replace lines with '***' or '* * *' or similar with '---'
+      line = '---' if line =~ /\*\s*\*\s*\*/
 
       # replace HTML entity elements with ASCII equivalents
       line.gsub!(/&amp;/, '&')
@@ -117,34 +131,41 @@ begin
       line.gsub!(/’/, '\'')
       # replace en dash with markdwon equivalent
       line.gsub!(/—/, '--')
-      # replace '***' or '* * *' with '---'
-      line.gsub!(/\* \* \*/, '---')
-      line.gsub!(/\*\*\*/, '---')
+
+      # replace '\.' with '.'
+      line.gsub!(/\\\./, '.')
+
       # replace a line just surrounded by **...** with an H4 instead
       line.gsub!(/^\s*\*\*(.*)\*\*\s*$/, '#### \1')
       # replace asterisk lists with dash lists (to stop NP thinking they are tasks)
       line.gsub!(/^(\s*)\*\s/, '\1- ')
 
-      puts "  #{n}: #{line_in.chomp}\n   -> #{line}" if $verbose && line_in != line
+      if line_in != line
+        puts "  #{n}: #{line_in.chomp}\n   -> #{line}" if $verbose
+        lines[n] = line
+      end
 
       n += 1
     end
     f.close
 
-    line_count = lines.size # e.g. for lines 0-2 size => 3
-    puts "  Read file '#{this_file}'"
+    # line_count = lines.size # e.g. for lines 0-2 size => 3
+    puts "  Read file '#{this_file}' and ignore before/after = #{ignore_before} / #{ignore_after}"
 
     #-------------------------------------------------------------------------
     # write out this updated file, as a markdown file
     #-------------------------------------------------------------------------
-    # open file and write all the lines out
+    # open file and write all the lines out,
+    # though ignoring any before the first H1 line, and from Comments onwards
     new_filename = "#{this_file[0..-5]}.#{NOTE_EXT}" # take off .txt and put on .md
     File.open(new_filename, 'w') do |f|
+      n = 0
       lines.each do |line|
-        f.puts line
+        f.puts line if n >= ignore_before && n < ignore_after
+        n += 1
       end
     end
-    puts '  -> written updated version to ' + this_file.to_s.colorize(CompletedColour)
+    puts "  -> written updated version to #{new_filename}".to_s.colorize(CompletedColour)
 
     # Now rename file to same as above but _YYYYMMDDHHMM on the end
     archive_filename = "#{IFTTT_ARCHIVE_FILEPATH}/#{this_file}"
