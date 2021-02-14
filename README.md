@@ -24,7 +24,14 @@ In more detail:
 
 This feature can be turned off using the `-n` option.  
 
-NB: This only operates from Daily (Calendar) notes; it therefore doesn't interfere with **linking and backlinking** between main notes.
+(From v1.9.2) The script can now move any Daily (Calendar) note entries with a `>date` in it to the end of the mentioned Daily note. To do so requires turning on through the `-m` option.
+
+In more detail:
+- where the line is a heading, it moves the heading and all following lines until a blank line, or the next heading of the same level
+- where the line isn't a heading, it moves the line and any following indented lines (optionally terminated by a blank line)
+- where the note for the mentioned `>date` doesn't exist, it is created first
+
+NB: Both of these functions only operate from Daily (Calendar) notes; they therefore doesn't interfere with **linking and backlinking** between main notes.
 
 ### Templates for dates
 It changes any mentions of **date offset patterns** (such as `{-10d}`, `{+2w}`, `{-3m}`) into scheduled dates (e.g. `>2020-02-27`), if it can find a valid date pattern in the previous heading, previous main task if it has sub-tasks, or in the line itself. This allows for users to define simple **template sections** and copy and paste them into the note, set the due date at the start, and the other dates are then worked out for you.
@@ -97,8 +104,9 @@ There are 2 ways of running the script:
 
 You can also specify **options**:
 - `-h` for help, 
-- `-a` (`--noarchive`) don't archive completed tasks into the `# Done` section. _This is currently on by default, as the feature isn't yet complete to my satisfaction._
+- `-a` (`--noarchive`) don't archive completed tasks into the `# Done` section. _This is currently off by default, as the feature isn't yet complete to my satisfaction._
 - `c` (`--changes HOURS`) how many hours to look back to find note changes to process, overriding the default of 24 hours (though this can be changed; see below)
+- `-m` (`--moveon`) turn on moving mentions of `>date` in a daily calendar day file to the specified date
 - `-n` (`--nomove`) turn off moving mentions of [[Note]] in a daily calendar day file to the [[Note]]. You'll want to do this if you're using the [[...]] notation for backlinks (from NP v3.0.15 onwards)
 - `-q` (`--quiet`) suppress all output, other than error messages
 - `-s` (`--keepschedules`) keep the scheduled (>) dates of completed tasks

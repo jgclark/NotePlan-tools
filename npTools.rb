@@ -1,12 +1,15 @@
 #!/usr/bin/ruby
 #-------------------------------------------------------------------------------
 # NotePlan Tools script
-# by Jonathan Clark, v1.9.1, 18.1.2021
+# by Jonathan Clark, v1.9.2, 13.2.2021
 #-------------------------------------------------------------------------------
 # See README.md file for details, how to run and configure it.
 # Repository: https://github.com/jgclark/NotePlan-tools/
 #-------------------------------------------------------------------------------
-VERSION = "1.9.1"
+# TODO: More efficient will be to avoid reading all notes in, but where something
+# needs moving to a different note, then try to load it, and create it if needs be.
+
+VERSION = "1.9.2"
 
 require 'date'
 require 'time'
@@ -19,7 +22,7 @@ require 'optparse' # more details at https://docs.ruby-lang.org/en/2.1.0/OptionP
 #-------------------------------------------------------------------------------
 hours_to_process = 24 # by default will process all files changed within this number of hours
 NUM_HEADER_LINES = 4 # suits my use, but probably wants to be 1 for most people
-TAGS_TO_REMOVE = ['#waiting', '#high', '#started', '⭐'].freeze # simple array of strings
+TAGS_TO_REMOVE = ['#waiting', '#high', '#started', '#⭐'].freeze # simple array of strings
 DATE_TIME_LOG_FORMAT = '%e %b %Y %H:%M'.freeze # only used in logging
 RE_DATE_FORMAT_CUSTOM = '\d{1,2}[\-\.//][01]?\d[\-\.//]\d{4}'.freeze # regular expression of alternative format used to find dates in templates. This matches DD.MM.YYYY and similar.
 # DATE_TIME_APPLESCRIPT_FORMAT = '%e %b %Y %I:%M %p'.freeze # format for creating Calendar events (via AppleScript) when Region setting is 12-hour clock
@@ -27,6 +30,7 @@ DATE_TIME_APPLESCRIPT_FORMAT = '%e %b %Y %H:%M:%S'.freeze # format for creating 
 CALENDAR_APP_TO_USE = 'Calendar' # Name of Calendar app to use in create_event AppleScript. Default is 'Calendar'.
 CALENDAR_NAME_TO_USE = 'Jonathan (iCloud)' # Apple (iCal) Calendar name to create new events in (if required)
 CREATE_EVENT_TAG_TO_USE = '#create_event' # customise if you want a different tag
+NOTE_EXT = 'md' # or 'txt'
 
 #-------------------------------------------------------------------------------
 # Other Constants & Settings
@@ -57,7 +61,7 @@ time_now = Time.now
 time_now_fmttd = time_now.strftime(DATE_TIME_LOG_FORMAT)
 $verbose = 0
 $archive = 0
-$remove_scheduled = 1
+$remove_rescheduled = 1
 $allNotes = []  # to hold all note objects
 $notes    = []  # to hold all relevant note objects
 $date_today = time_now.strftime(DATE_TODAY_FORMAT)
@@ -103,7 +107,7 @@ def calc_offset_date(old_date, interval)
 end
 
 def create_new_empty_file(title, ext)
-  # Populate empty NPFile object, adding just title
+  # Populate empty NPFile object for a *non-daily note*, adding just title.
 
   # Use x-callback scheme to add a new note in NotePlan,
   # as defined at http://noteplan.co/faq/General/X-Callback-Url%20Scheme/
@@ -126,12 +130,61 @@ def create_new_empty_file(title, ext)
 
   # Now read this new file into the $allNotes array
   Dir.chdir(NP_NOTES_DIR)
-  sleep(3) # wait for the file to become available. TODO: probably a smarter way to do this
+  sleep(2) # wait for the file to become available. TODO: probably a smarter way to do this. What about marking as changed, and adding to a separate array of new notes to write out?
   filename = "#{title}.#{ext}"
   new_note = NPFile.new(filename)
   new_note_id = new_note.id
   $allNotes[new_note_id] = new_note
   puts "Added new note id #{new_note_id} with title '#{title}' and filename '#{filename}'. New $allNotes count = #{$allNotes.count}" if $verbose > 1
+end
+
+def find_or_create_daily_note(yyyymmdd)
+  # Read in a note that we want to update.
+  # If it doesn't exist, create it.
+  puts "    - starting to find_or_create_daily_note for #{yyyymmdd}"
+  filename = "#{yyyymmdd}.#{NOTE_EXT}"
+  noteToAddTo = nil  # for an integer, but starting as nil
+
+  # First check if it exists in existing notes read in
+  $allNotes.each do |nn|
+    next if nn.filename != filename
+
+    noteToAddTo = nn.id
+    puts "      - found match via filename (id #{noteToAddTo}) " if $verbose > 1
+  end
+
+  if noteToAddTo.nil?
+    # now try reading in an existing daily note
+    Dir.chdir(NP_CALENDAR_DIR)
+    puts "    - Looking for daily note filename #{filename}:" if $verbose > 0
+    if File.exist?(filename)
+      $allNotes << NPFile.new(filename) 
+      # now find the id of this most-recently-added NPFile instance
+      noteToAddTo = $npfile_count
+      puts "      - read in match via filename (-> id #{noteToAddTo}) " if $verbose > 1
+    else
+      # finally, we need create the note
+      puts "        - warning: can't find matching note filename '#{filename}' -- so will create it".colorize(InfoColour)
+      begin
+        f = File.new(filename, 'a+')
+        f.close
+      rescue StandardError => e
+        puts "ERROR: #{e.exception.message} when creating daily note file #{filename}".colorize(WarningColour)
+      end
+      $allNotes << NPFile.new(filename)
+      # now find the id of this newly-created NPFile instance
+      noteToAddTo = $npfile_count
+      puts "    -> file '#{$allNotes[noteToAddTo - 1].filename}' id #{noteToAddTo}" if $verbose > 0
+    end
+  end
+  return noteToAddTo
+end
+
+def find_or_create_note(title)
+  # Read in a note that we want to update.
+  # If it doesn't exist, create it.
+  # TODO
+  puts "WARNING: find_or_create_note: this function is not yet ready for use.".colorize(WarningColour)
 end
 
 def osascript(script)
@@ -151,10 +204,11 @@ class NPFile
   attr_reader :title
   attr_reader :cancelled_header
   attr_reader :done_header
+  attr_reader :filename
   attr_reader :is_today
   attr_reader :is_calendar
   attr_reader :is_updated
-  attr_reader :filename
+  attr_reader :line_count
   attr_reader :modified_time
 
   def initialize(this_file)
@@ -213,6 +267,13 @@ class NPFile
   #   object.create_new_empty_file(*args)
   #   object # implicit return
   # end
+
+  def append_new_line(new_line)
+    # Append 'line' into position 'line_number'
+    puts '  append_new_line ...' if $verbose > 1
+    @lines << new_line
+    @line_count += 1
+  end
 
   def create_events_from_timeblocks
     # Create calendar event in default calendar from an NP timeblock given in
@@ -411,7 +472,7 @@ class NPFile
       # only do something if this is a completed or cancelled task
       if @lines[n] =~ /\[(x|-)\]/
         # remove any <YYYY-MM-DD on completed or cancelled tasks
-        if $remove_scheduled == 1
+        if $remove_rescheduled == 1
           if (@lines[n] =~ /\s<\d{4}\-\d{2}\-\d{2}/)
             @lines[n].gsub!(/\s<\d{4}\-\d{2}\-\d{2}/, '')
             cleaned += 1
@@ -434,10 +495,11 @@ class NPFile
     puts "  - removed #{cleaned} tags" if $verbose > 0
   end
 
-  def remove_scheduled
+  def remove_rescheduled
+    # TODO: is this working OK?
     # remove [>] tasks from calendar notes, as there will be a duplicate
     # (whether or not the 'Append links when scheduling' option is set or not)
-    puts '  remove_scheduled ...' if $verbose > 1
+    puts '  remove_rescheduled ...' if $verbose > 1
     n = cleaned = 0
     while n < @line_count
       # Empty any [>] todo lines
@@ -467,37 +529,155 @@ class NPFile
     @line_count += 1
   end
 
-  def move_daily_ref_to_notes
-    # Move tasks with a [[note link]] to that note (inserting after header).
+  def move_daily_ref_to_daily
+    # Moves items in daily notes with a >date to that corresponding date.
     # Checks whether the note exists and if not, creates one first at top level.
-
-    # NOTE: In NP v2.4 and 3.0 there's a slight issue that there can be duplicate
-    # note titles over different sub-folders. This will likely be improved in
-    # the future, but for now I'll try to select the most recently-changed if
-    # there are matching names.
-    puts '  move_daily_ref_to_notes ...' if $verbose > 1
-    noteName = noteToAddTo = nil
+    # TODO: Simplified at the moment to just work on a single line?
+    puts '  move_daily_ref_to_daily ...' if $verbose > 1
+    # noteName = nil
+    noteToAddTo = nil
     n = 0
     moved = 0
     while n < @line_count
       line = @lines[n]
-      is_header = false
-      # find lines with [[note title]] mentions
-      if line !~ /\[\[.+\]\]/ # used to be /\[\[.+\]\]|^\s*.*\[\[.*\]\]/ # used to be /^#+\s+.*\[\[.*\]\]|^\s*.*\[\[.*\]\]/
+      # find lines with >date mentions
+      if line !~ /\s>\d{4}\-\d{2}\-\d{2}/
         # this line doesn't match, so break out of loop and go to look at next line
         n += 1
         next
       end
-      is_header = true if line =~ /^#+\s+.*/
+
+      # is_header = line =~ /^#+\s+.*/ ? true : false
 
       # the following regex matches returns an array with one item, so make a string (by join)
-      # NB the '+?' gets minimum number of chars, to avoid grabbing contents of several [[notes]] in the same line
-      line.scan(/\[\[(.+?)\]\]/) { |m| noteName = m.join }
-      puts "  - found note link [[#{noteName}]] in header on line #{n + 1} of #{@line_count}" if is_header && ($verbose > 0)
-      puts "  - found note link [[#{noteName}]] in notes on line #{n + 1} of #{@line_count}" if !is_header && ($verbose > 0)
+      # NOTE: thisthe '+?' gets minimum number of chars, to avoid grabbing contents of several [[notes]] in the same line
+      if line =~ /\s>\d{4}\-\d{2}\-\d{2}/
+        yyyy_mm_dd = ''
+        line.scan(/>(\d{4}\-\d{2}\-\d{2})/) { |m| yyyy_mm_dd = m.join }
+        # puts "  - found calendar link >#{yyyy_mm_dd} in header on line #{n + 1} of #{@line_count}" if is_header && ($verbose > 0)
+        puts "  - found calendar link >#{yyyy_mm_dd} in notes on line #{n + 1} of #{@line_count}" if $verbose > 0 # && !is_header
+        yyyymmdd = "#{yyyy_mm_dd[0..3]}#{yyyy_mm_dd[5..6]}#{yyyy_mm_dd[8..9]}"
+      end
 
-      # find the note file to add to
-      # expect there to be several with same title: if so then use the one with the most recent modified_time
+      # Find the existing daily note to add to, or read in, or create
+      noteToAddTo = find_or_create_daily_note(yyyymmdd) - 1 # TODO: check me
+      lines_to_output = ''
+
+      # Remove the >date text by finding string points
+      label_start = line.index('>') - 1 # remove space before it as well. TODO: could be several > so find the right one
+      label_end = label_start + 12
+      # also chomp off last character of line (newline)
+      line = "#{line[0..label_start]}#{line[label_end..-2]}"
+
+      is_header = line =~ /^#+\s+.*/ ? true : false
+
+      if !is_header
+        # If no due date is specified in rest of the line, add date from the title of the calendar file it came from
+        if line !~ />\d{4}\-\d{2}\-\d{2}/
+          cal_date = "#{@title[0..3]}-#{@title[4..5]}-#{@title[6..7]}"
+          puts "    - '#{cal_date}' to add from #{@title}" if $verbose > 1
+          lines_to_output = line + " <#{cal_date}\n"
+        else
+          lines_to_output = line
+        end
+        # Work out indent level of current line
+        line_indent = ''
+        line.scan(/^(\s*)\*/) { |m| line_indent = m.join }
+        puts "  - starting line analysis at line #{n + 1} of #{@line_count} with indent '#{line_indent}' (#{line_indent.length})" if $verbose > 1
+
+        # Remove this line from the calendar note TODO: not all being removed
+        @lines.delete_at(n)
+        @line_count -= 1
+        moved += 1
+
+        # We also want to take any following indented lines
+        # So incrementally add lines until we find ones at the same or lower level of indent
+        while n < @line_count
+          line_to_check = @lines[n]
+          # What's the indent of this line?
+          line_to_check_indent = ''
+          line_to_check.scan(/^(\s*)\S/) { |m| line_to_check_indent = m.join }
+          puts "    - for '#{line_to_check.chomp}' indent='#{line_to_check_indent}' (#{line_to_check_indent.length})" if $verbose > 1
+          break if line_indent.length >= line_to_check_indent.length
+
+          lines_to_output += line_to_check
+          # Remove this line from the calendar note
+          @lines.delete_at(n)
+          @line_count -= 1
+          moved += 1
+        end
+      else
+        # This is a header line ...
+        # We want to take any following lines up to the next blank line or same-level header.
+        # So incrementally add lines until we find that break.
+        header_marker = ''
+        line.scan(/^(#+)\s/) { |m| header_marker = m.join }
+        lines_to_output = line + "\n"
+        @lines.delete_at(n)
+        @line_count -= 1
+        moved += 1
+        puts "  - starting header analysis at line #{n + 1}" if $verbose > 1
+
+        while n < @line_count
+          line_to_check = @lines[n]
+          puts "    - l_t_o checking '#{line_to_check}'" if $verbose > 1
+          break if (line_to_check =~ /^\s*$/) || (line_to_check =~ /^#{header_marker}\s/)
+
+          lines_to_output += line_to_check
+          # Remove this line from the calendar note
+          puts "    - @line_count now #{@line_count}" if $verbose > 1
+          @lines.delete_at(n)
+          @line_count -= 1
+          moved += 1
+        end
+      end
+
+      # append updated line(s) after header lines in the note file
+      $allNotes[noteToAddTo].append_new_line(lines_to_output)
+
+      # write the note file out
+      $allNotes[noteToAddTo].rewrite_file
+    end
+    return unless moved.positive?
+
+    @is_updated = true
+    puts "  - moved #{moved} lines to daily notes" if $verbose > 0
+  end
+
+  def move_daily_ref_to_notes
+    # Move items in daily note with a [[note link]] to that note (inserting after header).
+    # Checks whether the note exists and if not, creates one first at top level.
+
+    # NOTE: In NP v2.4+ there's a slight issue that there can be duplicate
+    # note titles over different sub-folders. This will likely be improved in
+    # the future, but for now I'll try to select the most recently-changed if
+    # there are matching names.
+    puts '  move_daily_ref_to_notes ...' if $verbose > 1
+    noteName = nil
+    noteToAddTo = nil
+    n = 0
+    moved = 0
+    while n < @line_count
+      line = @lines[n]
+      # find lines with [[note title]] mentions
+      if line !~ /\[\[.+\]\]/
+        # this line doesn't match, so break out of loop and go to look at next line
+        n += 1
+        next
+      end
+
+      is_header = line =~ /^#+\s+.*/ ? true : false
+
+      # the following regex matches returns an array with one item, so make a string (by join)
+      # NOTE: thisthe '+?' gets minimum number of chars, to avoid grabbing contents of several [[notes]] in the same line
+      if line =~ /\[\[.+\]\]/
+        line.scan(/\[\[(.+?)\]\]/) { |m| noteName = m.join }
+        puts "  - found note link [[#{noteName}]] in header on line #{n + 1} of #{@line_count}" if is_header && ($verbose > 0)
+        puts "  - found note link [[#{noteName}]] in notes on line #{n + 1} of #{@line_count}" if !is_header && ($verbose > 0)
+      end
+
+      # Find the note file to add to. Expect there to be several
+      # with same title: if so then use the one with the most recent modified_time
       # mtime = Time.new(1970, 1, 1) # i.e. the earlist possible time
       $allNotes.each do |nn|
         next if nn.title != noteName
@@ -511,9 +691,8 @@ class NPFile
         puts "  - warning: can't find matching note for [[#{noteName}]] -- so will create it".colorize(InfoColour)
         ext = @filename.scan(/\.(.+?)$/).join('')
         create_new_empty_file(noteName, ext) # ideally find a way to have multiple initialisers, rather than this which is a bit of a hack
-        # now find the id of this newly-created NPFile
+        # now find the id of this newly-created NPFile instance
         noteToAddTo = $npfile_count
-        # f = $allNotes[noteToAddTo].filename # found that f wasn't being used, so commented out
         puts "    -> file '#{$allNotes[noteToAddTo].filename}' id #{noteToAddTo}" if $verbose > 0
       end
 
@@ -522,7 +701,7 @@ class NPFile
       # Remove the [[name]] text by finding string points
       label_start = line.index('[[') - 2 # remove space before it as well
       label_end = line.index(']]') + 2
-      # also chomp off last character (newline)
+      # also chomp off last character of line (newline)
       line = "#{line[0..label_start]}#{line[label_end..-2]}"
 
       if !is_header
@@ -979,9 +1158,10 @@ options = {}
 opt_parser = OptionParser.new do |opts|
   opts.banner = "NotePlan tools v#{VERSION}\nDetails at https://github.com/jgclark/NotePlan-tools/\nUsage: npTools.rb [options] [file-pattern]"
   opts.separator ''
-  options[:move] = 1
   options[:archive] = 0 # default off at the moment as feature isn't complete
-  options[:remove_scheduled] = 1
+  options[:move_daily_to_note] = 1
+  options[:move_on_dailies] = 0
+  options[:remove_rescheduled] = 1
   options[:skipfile] = ''
   options[:skiptoday] = false
   options[:quiet] = false
@@ -1002,14 +1182,17 @@ opt_parser = OptionParser.new do |opts|
   opts.on('-i', '--skiptoday', "Don't touch today's daily note file") do
     options[:skiptoday] = true
   end
+  opts.on('-m', '--moveon', "Move Daily items with >date to that Daily note") do
+    options[:move_on_dailies] = 1
+  end
   opts.on('-n', '--nomove', "Don't move Daily items with [[Note]] reference to that Note") do
-    options[:move] = 0
+    options[:move_daily_to_note] = 0
   end
   opts.on('-q', '--quiet', 'Suppress all output, apart from error messages. Overrides -v or -w.') do
     options[:quiet] = true
   end
-  opts.on('-s', '--keepschedules', 'Keep the scheduled (>) dates of completed tasks') do
-    options[:remove_scheduled] = 0
+  opts.on('-s', '--keepscheduled', 'Keep the re-scheduled (>) dates of completed tasks') do
+    options[:remove_rescheduled] = 0
   end
   opts.on('-v', '--verbose', 'Show information as I work') do
     options[:verbose] = 1
@@ -1022,7 +1205,7 @@ opt_parser.parse! # parse out options, leaving file patterns to process
 $quiet = options[:quiet]
 $verbose = $quiet ? 0 : options[:verbose] # if quiet, then verbose has to  be 0
 $archive = options[:archive]
-$remove_scheduled = options[:remove_scheduled]
+$remove_rescheduled = options[:remove_rescheduled]
 
 #--------------------------------------------------------------------------------------
 # Start by reading all Notes files in
@@ -1121,10 +1304,11 @@ if $notes.count.positive? # if we have some files to work on ...
     note.clear_empty_tasks_or_headers
     note.remove_empty_header_sections
     note.remove_unwanted_tags_dates
-    note.remove_scheduled if note.is_calendar
+    note.remove_rescheduled if note.is_calendar
     note.process_repeats_and_done
     note.remove_multiple_empty_lines
-    note.move_daily_ref_to_notes if note.is_calendar && options[:move] == 1
+    note.move_daily_ref_to_daily if note.is_calendar && options[:move_on_dailies] == 1
+    note.move_daily_ref_to_notes if note.is_calendar && options[:move_daily_to_note] == 1
     note.use_template_dates #unless note.is_calendar
     note.create_events_from_timeblocks
     note.archive_lines if $archive == 1 # not ready yet

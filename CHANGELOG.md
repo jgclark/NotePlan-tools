@@ -1,5 +1,8 @@
 # CHANGELOG
 
+## v1.9.2, 14.2.2021
+- [Improve] Now allow for `>date` events to be moved to from one daily to the one it points to. This has to be activated with the `-m` option, as it will be quite a significant change for some users.
+
 ## v1.9.1, 18.1.2021
 - [Fix] Fixed bug in file-matching logic [thanks to Dimitry for reporting]
 - [Fix] Fixed bug that stopped date pattern matching in calendar files [thanks to Dimitry for reporting]
