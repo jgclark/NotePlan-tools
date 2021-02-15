@@ -1,7 +1,7 @@
 # CHANGELOG
 
 ## v1.9.2, 14.2.2021
-- [Improve] Now allow for `>date` events to be moved to from one daily to the one it points to. This has to be activated with the `-m` option, as it will be quite a significant change for some users.
+- [New] Now allow for `>date` events to be moved to from one daily to the one it points to. This has to be activated with the `-m` option, as it will be quite a significant change for some users.
 
 ## v1.9.1, 18.1.2021
 - [Fix] Fixed bug in file-matching logic [thanks to Dimitry for reporting]
@@ -49,7 +49,7 @@
 - [New] Allow use of weekdays in repeats and template dates (using 'b' rather than usual 'd' for days) [Issue 32]
 
 ## v1.7.2, 5.12.2020
-- [Improve] Extended the command line otion --skiptoday to allow comma-separated list of notes to ignore [thanks to @BMStroh PR32]
+- [Improve] Extended the command line option --skiptoday to allow comma-separated list of notes to ignore [thanks to @BMStroh PR32]
 
 ## 1.7.1, 26.11.2020
 - [New] add --skipfile=file option to ignore particular files [thanks to @BMStroh, issue 30]

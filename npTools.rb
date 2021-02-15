@@ -1,7 +1,7 @@
 #!/usr/bin/ruby
 #-------------------------------------------------------------------------------
 # NotePlan Tools script
-# by Jonathan Clark, v1.9.2, 13.2.2021
+# by Jonathan Clark, v1.9.2, 15.2.2021
 #-------------------------------------------------------------------------------
 # See README.md file for details, how to run and configure it.
 # Repository: https://github.com/jgclark/NotePlan-tools/
@@ -60,7 +60,7 @@ $verbose = 0
 $archive = 0
 $remove_rescheduled = 1
 $allNotes = []  # to hold all note objects
-$notes    = []  # to hold all relevant note objects
+$notes    = []  # to hold all note objects selected for processing
 $date_today = time_now.strftime(DATE_TODAY_FORMAT)
 $npfile_count = -1 # number of NPFile objects created so far (incremented before first use)
 
@@ -140,7 +140,7 @@ end
 
 def find_or_create_daily_note(yyyymmdd)
   # Read in a note that we want to update. If it doesn't exist, create it.
-  puts "    - starting to find_or_create_daily_note for #{yyyymmdd}"
+  puts "    - starting find_or_create_daily_note for #{yyyymmdd}" if $verbose > 1
   filename = "#{yyyymmdd}.#{NOTE_EXT}"
   noteToAddTo = nil  # for an integer, but starting as nil
 
@@ -188,6 +188,7 @@ def find_or_create_note(title)
   # the future, but for now I'll try to select the most recently-changed if
   # there are matching names.
 
+  puts "    - starting find_or_create_note for '#{title}'" if $verbose > 1
   new_note_id = nil  # for an integer, but starting as nil
 
   # First check if it exists in existing notes read in
@@ -287,7 +288,8 @@ class NPFile
       @is_today = false
     end
 
-    puts "Init NPFile #{@id} from #{this_file}, updated #{@modified_time} #{@line_count} #{@is_calendar}" if $verbose > 1
+    modified = (@modified_time.to_s)[0..15]
+    puts "      Init NPFile #{@id}: #{@line_count} lines from #{this_file}, updated #{modified}".colorize(InfoColour) if $verbose > 1
   end
 
   # def self.new2(*args)
@@ -300,10 +302,11 @@ class NPFile
   # end
 
   def append_new_line(new_line)
-    # Append 'line' into position 'line_number'
+    # Append 'new_line' into position
+    # TODO: should ideally split on '\n' and add each potential line separately
     puts '  append_new_line ...' if $verbose > 1
     @lines << new_line
-    @line_count += 1
+    @line_count = @lines.size
   end
 
   def create_events_from_timeblocks
@@ -495,6 +498,19 @@ class NPFile
     puts "  - removed #{cleaned} empty lines" if $verbose > 0
   end
 
+  def insert_new_line(new_line, line_number)
+    # Insert 'new_line' into position 'line_number'
+    puts '  insert_new_line ...' if $verbose > 1
+    n = @line_count # start iterating from the end of the array
+    line_number = n if line_number >= n # don't go beyond current size of @lines
+    while n >= line_number
+      @lines[n + 1] = @lines[n]
+      n -= 1
+    end
+    @lines[line_number] = new_line
+    @line_count = @lines.size
+  end
+
   def remove_unwanted_tags_dates
     # removes specific tags and >dates from complete or cancelled tasks
     puts '  remove_unwanted_tags_dates ...' if $verbose > 1
@@ -548,23 +564,9 @@ class NPFile
     puts "  - removed #{cleaned} scheduled" if $verbose > 0
   end
 
-  def insert_new_line(new_line, line_number)
-    # Insert 'line' into position 'line_number'
-    puts '  insert_new_line ...' if $verbose > 1
-    n = @line_count # start iterating from the end of the array
-    line_number = n if line_number >= n # don't go beyond current size of @lines
-    while n >= line_number
-      @lines[n + 1] = @lines[n]
-      n -= 1
-    end
-    @lines[line_number] = new_line
-    @line_count += 1
-  end
-
   def move_daily_ref_to_daily
     # Moves items in daily notes with a >date to that corresponding date.
     # Checks whether the note exists and if not, creates one first at top level.
-    # TODO: Simplified at the moment to just work on a single line?
     puts '  move_daily_ref_to_daily ...' if $verbose > 1
     # noteToAddTo = nil
     n = 0
@@ -582,16 +584,16 @@ class NPFile
 
       # the following regex matches returns an array with one item, so make a string (by join)
       # NOTE: thisthe '+?' gets minimum number of chars, to avoid grabbing contents of several [[notes]] in the same line
-      if line =~ /\s>\d{4}\-\d{2}\-\d{2}/
+      if line =~ /\s>\d{4}-\d{2}-\d{2}/
         yyyy_mm_dd = ''
-        line.scan(/>(\d{4}\-\d{2}\-\d{2})/) { |m| yyyy_mm_dd = m.join }
+        line.scan(/>(\d{4}-\d{2}-\d{2})/) { |m| yyyy_mm_dd = m.join }
         # puts "  - found calendar link >#{yyyy_mm_dd} in header on line #{n + 1} of #{@line_count}" if is_header && ($verbose > 0)
         puts "  - found calendar link >#{yyyy_mm_dd} in notes on line #{n + 1} of #{@line_count}" if $verbose > 0 # && !is_header
         yyyymmdd = "#{yyyy_mm_dd[0..3]}#{yyyy_mm_dd[5..6]}#{yyyy_mm_dd[8..9]}"
       end
 
       # Find the existing daily note to add to, or read in, or create
-      noteToAddTo = find_or_create_daily_note(yyyymmdd) - 1 # TODO: check me
+      noteToAddTo = find_or_create_daily_note(yyyymmdd)
       lines_to_output = ''
 
       # Remove the >date text by finding string points
@@ -606,7 +608,7 @@ class NPFile
         # If no due date is specified in rest of the line, add date from the title of the calendar file it came from
         if line !~ />\d{4}\-\d{2}\-\d{2}/
           cal_date = "#{@title[0..3]}-#{@title[4..5]}-#{@title[6..7]}"
-          puts "    - '#{cal_date}' to add from #{@title}" if $verbose > 1
+          puts "    - '>#{cal_date}' to add from #{@title}" if $verbose > 1
           lines_to_output = line + " <#{cal_date}\n"
         else
           lines_to_output = line
@@ -614,9 +616,9 @@ class NPFile
         # Work out indent level of current line
         line_indent = ''
         line.scan(/^(\s*)\*/) { |m| line_indent = m.join }
-        puts "  - starting line analysis at line #{n + 1} of #{@line_count} with indent '#{line_indent}' (#{line_indent.length})" if $verbose > 1
+        puts "    - starting line analysis at line #{n + 1} of #{@line_count} (indent #{line_indent.length})" if $verbose > 1
 
-        # Remove this line from the calendar note TODO: not all being removed
+        # Remove this line from the calendar note
         @lines.delete_at(n)
         @line_count -= 1
         moved += 1
@@ -628,7 +630,7 @@ class NPFile
           # What's the indent of this line?
           line_to_check_indent = ''
           line_to_check.scan(/^(\s*)\S/) { |m| line_to_check_indent = m.join }
-          puts "    - for '#{line_to_check.chomp}' indent='#{line_to_check_indent}' (#{line_to_check_indent.length})" if $verbose > 1
+          puts "      - for '#{line_to_check.chomp}' (indent #{line_to_check_indent.length})" if $verbose > 1
           break if line_indent.length >= line_to_check_indent.length
 
           lines_to_output += line_to_check
@@ -663,7 +665,8 @@ class NPFile
         end
       end
 
-      # append updated line(s) after header lines in the note file
+      # append updated line(s) in the daily note file
+      puts "    - appending line to daily note id #{noteToAddTo} ..."
       $allNotes[noteToAddTo].append_new_line(lines_to_output)
 
       # write the note file out
@@ -1264,7 +1267,13 @@ if ARGV.count.positive?
       puts "  Looking for daily note filenames matching glob_pattern #{glob_pattern}:" if $verbose > 0
       Dir.glob(glob_pattern).each do |this_file|
         puts "  - #{this_file}" if $verbose > 0
-        $notes << NPFile.new(this_file) unless File.zero?(this_file) # read in file unless this file is empty
+        # read in file unless this file is empty
+        next if File.zero?(this_file)
+
+        this_note = NPFile.new(this_file)
+        $allNotes << this_note
+        # copy the $allNotes item into $notes array
+        $notes << this_note
       end
     end
   rescue StandardError => e
@@ -1278,7 +1287,7 @@ else
     $allNotes.each do |this_note|
       next unless this_note.modified_time > (time_now - hours_to_process * 60 * 60)
 
-      # Note has already been read in; so now just find which one to point to
+      # copy this relevant $allNotes item into $notes array to process
       $notes << this_note
     end
   rescue StandardError => e
@@ -1294,7 +1303,9 @@ else
       # if modified time (mtime) in the last 24 hours
       next unless File.mtime(this_file) > (time_now - hours_to_process * 60 * 60)
 
-      # read the calendar file in
+      this_note = NPFile.new(this_file)
+      $allNotes << this_note
+      # copy the $allNotes item into $notes array
       $notes << NPFile.new(this_file)
     end
   rescue StandardError => e
