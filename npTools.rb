@@ -1306,7 +1306,7 @@ else
       this_note = NPFile.new(this_file)
       $allNotes << this_note
       # copy the $allNotes item into $notes array
-      $notes << NPFile.new(this_file)
+      $notes << this_note
     end
   rescue StandardError => e
     puts "ERROR: #{e.exception.message} when finding recently changed files".colorize(WarningColour)
