@@ -12,6 +12,7 @@ require 'optparse' # more details at https://docs.ruby-lang.org/en/2.1.0/OptionP
 #-------------------------------------------------------------------------------
 # Setting variables to tweak
 #-------------------------------------------------------------------------------
+MEDIA_STRING = '### Media' # the title of the section heading to add these notes to
 NOTE_EXT = "md" # or "txt"
 IFTTT_FILEPATH = "/Users/jonathan/Dropbox/IFTTT/"
 IFTTT_ARCHIVE_FILEPATH = "/Users/jonathan/Dropbox/IFTTT/Archive/"
@@ -119,7 +120,7 @@ class NPCalFile
       f.each_line do |line|
         @lines[n] = line
         # log_message_screen(" #{n}: #{line}")
-        @media_header_line = n  if line =~ /^#+\s+Media/
+        @media_header_line = n if line =~ /^#{MEDIA_STRING}/
         n += 1
       end
       f.close
@@ -144,7 +145,7 @@ class NPCalFile
     # If @media_header_line is zero, then first append a Media H3 header
     log_message_screen("  append_to_media_section where media header at #{@media_header_line} (count=#{@line_count}) ...")
     if @media_header_line.zero?
-      insert_new_line('### Media', @line_count) 
+      insert_new_line("#{MEDIA_STRING}", @line_count)
       @media_header_line = @line_count
     end
     n = @media_header_line + 1
