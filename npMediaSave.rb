@@ -59,7 +59,7 @@ NP_CALENDAR_DIR = "#{np_base_dir}/Calendar".freeze
 String.disable_colorization false
 CompletedColour = :light_green
 InfoColour = :yellow
-WarningColour = :light_red
+ErrorColour = :light_red
 
 # Variables that need to be globally available
 time_now = Time.now
@@ -67,6 +67,25 @@ $date_time_now_log_fmttd = time_now.strftime(DATE_TIME_LOG_FORMAT)
 $date_time_now_file_fmttd = time_now.strftime(DATE_TIME_APPEND_FORMAT)
 $verbose = 0
 $npfile_count = 0
+
+#-------------------------------------------------------------------------
+# Helper Functions
+#-------------------------------------------------------------------------
+def main_message_screen(message)
+  puts message.colorize(CompletedColour)
+end
+
+def warning_message_screen(message)
+  puts message.colorize(InfoColour)
+end
+
+def error_message_screen(message)
+  puts message.colorize(ErrorColour)
+end
+
+def log_message_screen(message)
+  puts message if $verbose
+end
 
 #-------------------------------------------------------------------------
 # Class definition: NPCalFile
@@ -89,7 +108,7 @@ class NPCalFile
     @is_updated = false
 
     begin
-      puts " Reading NPCalFile for '#{@title}'" if $verbose
+      log_message_screen(" Reading NPCalFile for '#{@title}'")
 
       # initialise other variables (that don't need to persist with the class)
       n = 0
@@ -99,15 +118,15 @@ class NPCalFile
       f = File.open(@filename, 'r', encoding: 'utf-8')
       f.each_line do |line|
         @lines[n] = line
-        puts " #{n}: #{line}" if $verbose
+        log_message_screen(" #{n}: #{line}")
         @media_header_line = n  if line =~ /^#+\s+Media/
         n += 1
       end
       f.close
       @line_count = @lines.size # e.g. for lines 0-2 size => 3
-      puts " -> Read NPCalFile for '#{@title}' using id #{@id}. #{@line_count} lines (media at #{@media_header_line})" if $verbose
+      log_message_screen(" -> Read NPCalFile for '#{@title}' using id #{@id}. #{@line_count} lines (media at #{@media_header_line})")
     rescue StandardError => e
-      puts "ERROR: #{e.exception.message} when re-writing note file #{@filename}".colorize(WarningColour)
+      error_message_screen("ERROR: #{e.exception.message} when re-writing note file #{@filename}")
     end
   end
 
@@ -115,7 +134,7 @@ class NPCalFile
     # Insert 'line' into position 'line_number'
     # NB: this is insertion at the line number, so that current line gets moved to be one later
     n = @line_count # start iterating from the end of the array
-    puts "  insert_new_line at #{line_number} (count=#{n}) ..." if $verbose
+    log_message_screen("  insert_new_line at #{line_number} (count=#{n}) ...")
     # while n >= line_number
     #   @lines[n + 1] = @lines[n]
     #   n -= 1
@@ -127,7 +146,7 @@ class NPCalFile
 
   def append_media_header
     # Add '### Media' on end, and update counts
-    puts '  append_media_header ...' if $verbose
+    log_message_screen('  append_media_header ...')
     insert_new_line('', @line_count)
     insert_new_line('### Media', @line_count)
     @media_header_line = @line_count
@@ -135,7 +154,7 @@ class NPCalFile
 
   def rewrite_cal_file
     # write out this updated calendar file
-    puts "  > writing updated version of #{@filename}".to_s.bold if $verbose
+    main_message_screen("  > writing updated version of #{@filename}")
     # open file and write all the lines out
     begin
       File.open(@filename, 'w') do |f|
@@ -144,7 +163,7 @@ class NPCalFile
         end
       end
     rescue StandardError => e
-      puts "ERROR: #{e.exception.message} when re-writing calendar file #{filepath}".colorize(WarningColour)
+      error_message_screen("ERROR: #{e.exception.message} when re-writing calendar file #{filepath}")
     end
   end
 end
@@ -157,16 +176,16 @@ def process_spotify
   catch (:done) do  # provide a clean way out of this
     if defined?($spotify_test_data)
       f = $spotify_test_data
-      puts "Using Spotify test data"
+      log_message_screen("Using Spotify test data")
     elsif File.exist?(spotify_filepath)
       if File.empty?(spotify_filepath)
-        puts "Spotify file empty".colorize(InfoColour)
+        warning_message_screen("Spotify file empty")
         throw :done
       else
         f = File.open(spotify_filepath, 'r', encoding: 'utf-8')
       end
     else
-      puts "Spotify file not found".colorize(InfoColour)
+      warning_message_screen("Spotify file not found")
       throw :done
     end
 
@@ -174,14 +193,14 @@ def process_spotify
       f.each_line do |line|
         # Parse each line
         parts = line.split('|')
-        puts parts if $verbose
+        log_message_screen(parts)
         # parse the given date-time string, then create YYYYMMDD version of it
         date_YYYYMMDD = Date.parse(parts[0]).strftime('%Y%m%d')
-        puts "  Found item to save with date #{date_YYYYMMDD}:" if $verbose
+        log_message_screen("  Found item to save with date #{date_YYYYMMDD}:")
 
         # Format line to add
         line_to_add = "- new #spotify fave **#{parts[1].strip}**'s [#{parts[2].strip}](#{parts[4].strip}) from album **#{parts[3].strip}** ![album art](#{parts[5].strip})"
-        puts line_to_add if $verbose
+        log_message_screen(line_to_add)
 
         # Read in the NP Calendar file for this date
         this_note = NPCalFile.new(date_YYYYMMDD)
@@ -190,7 +209,7 @@ def process_spotify
         this_note.append_media_header if this_note.media_header_line.zero?
         this_note.insert_new_line(line_to_add, this_note.line_count)
         this_note.rewrite_cal_file
-        puts "-> Saved new Spotify fave to #{date_YYYYMMDD}".colorize(CompletedColour)
+        main_message_screen("-> Saved new Spotify fave to #{date_YYYYMMDD}")
       end
 
       unless defined?($spotify_test_data)
@@ -200,7 +219,7 @@ def process_spotify
         File.rename(spotify_filepath, archive_filename)
       end
     rescue StandardError => e
-      puts "ERROR: #{e.exception.message} for file #{SPOTIFY_FILE}".colorize(WarningColour)
+      error_message_screen("ERROR: #{e.exception.message} for file #{SPOTIFY_FILE}")
     end
   end
 end
@@ -213,16 +232,16 @@ def process_instapaper
   catch (:done) do  # provide a clean way out of this
     if defined?($instapaper_test_data)
       f = $instapaper_test_data
-      puts "Using Instapaper test data"
+      log_message_screen("Using Instapaper test data")
     elsif File.exist?(instapaper_filepath)
       if File.empty?(instapaper_filepath)
-        puts "Note: Instapaper file empty".colorize(InfoColour)
+        warning_message_screen("Note: Instapaper file empty")
         throw :done
       else
         f = File.open(instapaper_filepath, 'r', encoding: 'utf-8')
       end
     else
-      puts "Instapaper file not found".colorize(InfoColour)
+      warning_message_screen("Instapaper file not found")
       throw :done
     end
 
@@ -230,16 +249,16 @@ def process_instapaper
       f.each_line do |line|
         # Parse each line
         parts = line.split(" \\ ")
-        # puts "  #{line} --> #{parts}" if $verbose
+        # log_message_screen("  #{line} --> #{parts}")
         # parse the given date-time string, then create YYYYMMDD version of it
         date_YYYYMMDD = Date.parse(parts[0]).strftime('%Y%m%d')
-        puts "  Found item to save with date #{date_YYYYMMDD}:" if $verbose
+        log_message_screen("  Found item to save with date #{date_YYYYMMDD}:")
 
         # Format line to add. Guard against possible empty fields
         parts[2] = '' if parts[2].nil?
         parts[3] = '' if parts[3].nil?
         line_to_add = "- #article **[#{parts[1].strip}](#{parts[2].strip})** #{parts[3].strip}"
-        puts line_to_add if $verbose
+        log_message_screen(line_to_add)
 
         # Read in the NP Calendar file for this date
         this_note = NPCalFile.new(date_YYYYMMDD)
@@ -248,7 +267,7 @@ def process_instapaper
         this_note.append_media_header if this_note.media_header_line.zero?
         this_note.insert_new_line(line_to_add, this_note.line_count)
         this_note.rewrite_cal_file
-        puts "-> Saved new Instapaper item to #{date_YYYYMMDD}".colorize(CompletedColour)
+        main_message_screen("-> Saved new Instapaper item to #{date_YYYYMMDD}")
       end
 
       unless defined?($instapaper_test_data)
@@ -258,7 +277,7 @@ def process_instapaper
         File.rename(instapaper_filepath, archive_filename)
       end
     rescue StandardError => e
-      puts "ERROR: #{e.exception.message} when processing file #{INSTAPAPER_FILE}".colorize(WarningColour)
+      error_message_screen("ERROR: #{e.exception.message} when processing file #{INSTAPAPER_FILE}")
     end
   end
 end
@@ -271,16 +290,16 @@ def process_twitter
   catch (:done) do  # provide a clean way out of this
     if defined?($twitter_test_data)
       f = $twitter_test_data
-      puts "Using Twitter test data"
+      log_message_screen("Using Twitter test data")
     elsif File.exist?(twitter_filepath)
       if File.empty?(twitter_filepath)
-        puts "Note: Twitter file empty".colorize(InfoColour)
+        warning_message_screen("Note: Twitter file empty")
         throw :done
       else
         f = File.open(twitter_filepath, 'r', encoding: 'utf-8')
       end
     else
-      puts "Twitter file not found".colorize(InfoColour)
+      warning_message_screen("Twitter file not found")
       throw :done
     end
 
@@ -288,14 +307,14 @@ def process_twitter
       f.each_line do |line|
         # Parse each line
         parts = line.split(" | ")
-        # puts "  #{line} --> #{parts}" if $verbose
+        # log_message_screen("  #{line} --> #{parts}")
         # parse the given date-time string, then create YYYYMMDD version of it
         date_YYYYMMDD = Date.parse(parts[0]).strftime('%Y%m%d')
-        puts "  Found item to save with date #{date_YYYYMMDD}:" if $verbose
+        log_message_screen("  Found item to save with date #{date_YYYYMMDD}:")
 
         # Format line to add
         line_to_add = "- @#{parts[2].strip} tweet: \"#{parts[1].strip}\" ([permalink](#{parts[3].strip}))"
-        puts line_to_add if $verbose
+        log_message_screen(line_to_add)
 
         # Read in the NP Calendar file for this date
         this_note = NPCalFile.new(date_YYYYMMDD)
@@ -304,7 +323,7 @@ def process_twitter
         this_note.append_media_header if this_note.media_header_line.zero?
         this_note.insert_new_line(line_to_add, this_note.line_count)
         this_note.rewrite_cal_file
-        puts "-> Saved new Twitter item to #{date_YYYYMMDD}".colorize(CompletedColour)
+        main_message_screen("-> Saved new Twitter item to #{date_YYYYMMDD}")
       end
 
       unless defined?($twitter_test_data)
@@ -314,7 +333,7 @@ def process_twitter
         File.rename(twitter_filepath, archive_filename)
       end
     rescue StandardError => e
-      puts "ERROR: #{e.exception.message} when processing file #{TWITTER_FILE}".colorize(WarningColour)
+      error_message_screen("ERROR: #{e.exception.message} when processing file #{TWITTER_FILE}")
     end
   end
 end
@@ -345,13 +364,13 @@ opt_parser = OptionParser.new do |opts|
   opts.on('-t', '--twitter', 'Add Twitter records') do
     options[:twitter] = true
   end
-  opts.on('-v', '--verbose', 'Show information as I work [on by default at the moment]') do
+  opts.on('-v', '--verbose', 'Show information as I work') do
     options[:verbose] = true
   end
 end
 opt_parser.parse! # parse out options, leaving file patterns to process
 
-puts "Starting npSaveMedia at #{$date_time_now_log_fmttd}."
+log_message_screen("Starting npSaveMedia at #{$date_time_now_log_fmttd}.")
 process_instapaper if options[:instapaper]
 process_spotify if options[:spotify]
 process_twitter if options[:twitter]
