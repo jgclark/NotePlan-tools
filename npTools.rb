@@ -343,11 +343,11 @@ class NPFile
       # make title: strip off #create_event, time strings, header/task/bullet punctuation, and any location info
       event_title = this_line.chomp
       event_title.gsub!(/ #{CREATE_EVENT_TAG_TO_USE}/, '')
-      event_title.gsub!(/^\s*[\*->](\s\[.\])?\s*/, '')
+      event_title.gsub!(/^\s*[*->](\s\[.\])?\s*/, '')
       event_title.gsub!(/^#+\s*/, '')
       event_title.gsub!(/\s\d\d?(-\d\d?)?(am|pm|AM|PM)/, '') # 3PM, 9-11am etc.
       event_title.gsub!(/\s\d\d?:\d\d(-\d\d?:\d\d)?(am|pm|AM|PM)?/, '') # 3:00PM, 9:00-9:45am etc.
-      event_title.gsub!(/>\d{4}\-\d{2}\-\d{2}/, '')
+      event_title.gsub!(/>\d{4}-\d{2}-\d{2}/, '')
       event_title.gsub!(/\sat\s.*$/, '')
 
       # Get times for event.
@@ -356,18 +356,18 @@ class NPFile
       # which means we have to use time format of "HH:MM[ ]am|AM|pm|PM" not "HH:MM:SS" or "HH:MM"
       start_mins = end_mins = start_hour = end_hour = 0
       time_parts = []
-      if this_line =~ /[^\d-]\d\d?[:\.]\d\d-\d\d?[:\.]\d\d(am|pm)?[\s$]/i
+      if this_line =~ /[^\d-]\d\d?[:.]\d\d-\d\d?[:.]\d\d(am|pm)?[\s$]/i
         # times of form '3:00-4:00am', '3.00-3.45PM' etc.
-        time_parts_da = this_line.scan(/[^\d-](\d\d?)[:\.](\d\d)-(\d\d?)[:\.](\d\d)(am|pm)?[\s$]/i)
+        time_parts_da = this_line.scan(/[^\d-](\d\d?)[:.](\d\d)-(\d\d?)[:.](\d\d)(am|pm)?[\s$]/i)
         time_parts = time_parts_da[0]
         puts "    - time_spec type 1: #{time_parts}" if $verbose > 1
         start_hour = time_parts[4] =~ /pm/i ? time_parts[0].to_i + 12 : time_parts[0].to_i
         start_mins = time_parts[1].to_i
         end_hour = time_parts[4] =~ /pm/i ? time_parts[2].to_i + 12 : time_parts[2].to_i
         end_mins = time_parts[3].to_i
-      elsif this_line =~ /[^\d-]\d\d?[:\.]\d\d(am|pm|AM|PM)?[\s$]/i
+      elsif this_line =~ /[^\d-]\d\d?[:.]\d\d(am|pm|AM|PM)?[\s$]/i
         # times of form '3:15[am|pm]'
-        time_parts_da = this_line.scan(/[^\d-](\d\d?)[:\.](\d\d)(am|pm)?[\s$]/i)
+        time_parts_da = this_line.scan(/[^\d-](\d\d?)[:.](\d\d)(am|pm)?[\s$]/i)
         time_parts = time_parts_da[0]
         puts "    - time_spec type 2: #{time_parts}"
         start_hour = time_parts[2] =~ /pm/i ? time_parts[0].to_i + 12 : time_parts[0].to_i
@@ -480,7 +480,7 @@ class NPFile
     n = cleaned = 0
     while n < @line_count
       # blank any lines which just have a * or -
-      if @lines[n] =~ /^\s*[\*\-]\s*$/
+      if @lines[n] =~ /^\s*[*\-]\s*$/
         @lines[n] = ''
         cleaned += 1
       end
@@ -503,11 +503,12 @@ class NPFile
     puts '  insert_new_line ...' if $verbose > 1
     n = @line_count # start iterating from the end of the array
     line_number = n if line_number >= n # don't go beyond current size of @lines
-    while n >= line_number
-      @lines[n + 1] = @lines[n]
-      n -= 1
-    end
-    @lines[line_number] = new_line
+    # while n >= line_number
+    #   @lines[n + 1] = @lines[n]
+    #   n -= 1
+    # end
+    # @lines[line_number] = new_line
+    @lines.insert(line_number, new_line)
     @line_count = @lines.size
   end
 
@@ -520,8 +521,8 @@ class NPFile
       if @lines[n] =~ /\[(x|-)\]/
         # remove any <YYYY-MM-DD on completed or cancelled tasks
         if $remove_rescheduled == 1
-          if @lines[n] =~ /\s<\d{4}\-\d{2}\-\d{2}/
-            @lines[n].gsub!(/\s<\d{4}\-\d{2}\-\d{2}/, '')
+          if @lines[n] =~ /\s<\d{4}-\d{2}-\d{2}/
+            @lines[n].gsub!(/\s<\d{4}-\d{2}-\d{2}/, '')
             cleaned += 1
           end
         end
@@ -574,7 +575,7 @@ class NPFile
     while n < @line_count
       line = @lines[n]
       # find lines with >date mentions
-      if line !~ /\s>\d{4}\-\d{2}\-\d{2}/
+      if line !~ /\s>\d{4}\d{2}-\d{2}/
         # this line doesn't match, so break out of loop and go to look at next line
         n += 1
         next
@@ -606,7 +607,7 @@ class NPFile
 
       if !is_header
         # If no due date is specified in rest of the line, add date from the title of the calendar file it came from
-        if line !~ />\d{4}\-\d{2}\-\d{2}/
+        if line !~ />\d{4}-\d{2}-\d{2}/
           cal_date = "#{@title[0..3]}-#{@title[4..5]}-#{@title[6..7]}"
           puts "    - '>#{cal_date}' to add from #{@title}" if $verbose > 1
           lines_to_output = line + " <#{cal_date}\n"
@@ -948,7 +949,7 @@ class NPFile
 
       # Try matching for the standard YYYY-MM-DD date pattern
       # (though check it's not got various characters before it, to defeat common usage in middle of things like URLs)
-      line.scan(/[^\d\(<>\/-](#{RE_YYYY_MM_DD})/) { |m| date_string = m.join }
+      line.scan(/[^\d(<>\/-](#{RE_YYYY_MM_DD})/) { |m| date_string = m.join }
       if date_string != ''
         # We have a date string to use for any offsets in the following section
         current_target_date = date_string
@@ -956,7 +957,7 @@ class NPFile
       else
         # Try matching for the custom date pattern, configured at the top
         # (though check it's not got various characters before it, to defeat common usage in middle of things like URLs)
-        line.scan(/[^\d\(<>\/-](#{RE_DATE_FORMAT_CUSTOM})/) { |m| date_string = m.join }
+        line.scan(/[^\d(<>\/-](#{RE_DATE_FORMAT_CUSTOM})/) { |m| date_string = m.join }
         if date_string != ''
           # We have a date string to use for any offsets in the following section
           current_target_date = date_string
@@ -970,13 +971,13 @@ class NPFile
       end
 
       # ignore line if we're in a template section (last_was_template is true)
-      if !last_was_template
+      unless last_was_template
         # find lines with {+3d} or {-4w} etc. plus {0d} special case
         # NB: this only deals with the first on any line; it doesn't make sense to have more than one.
         date_offset_string = ''
-        if line =~ /\{[\+\-]?\d+[bdwm]\}/
+        if line =~ /\{[+\-]?\d+[bdwm]\}/
           puts "    - Found line '#{line.chomp}'" if $verbose > 1
-          line.scan(/\{([\+\-]?\d+[bdwm])\}/) { |m| date_offset_string = m.join }
+          line.scan(/\{([+\-]?\d+[bdwm])\}/) { |m| date_offset_string = m.join }
           if date_offset_string != ''
             puts "      - Found DOS #{date_offset_string}' and last_was_template=#{last_was_template}" if $verbose > 1
             if current_target_date != ''
@@ -1028,10 +1029,10 @@ class NPFile
       completed_date = ''
       # find lines with date-time to shorten, and capture date part of it
       # i.e. @done(YYYY-MM-DD HH:MM[AM|PM])
-      if line =~ /@done\(\d{4}\-\d{2}\-\d{2} \d{2}:\d{2}(?:.(?:AM|PM))?\)/
+      if line =~ /@done\(\d{4}-\d{2}-\d{2} \d{2}:\d{2}(?:.(?:AM|PM))?\)/
         # get completed date
-        line.scan(/\((\d{4}\-\d{2}\-\d{2}) \d{2}:\d{2}(?:.(?:AM|PM))?\)/) { |m| completed_date = m.join }
-        updated_line = line.gsub(/\(\d{4}\-\d{2}\-\d{2} \d{2}:\d{2}(?:.(?:AM|PM))?\)/, "(#{completed_date})")
+        line.scan(/\((\d{4}-\d{2}-\d{2}) \d{2}:\d{2}(?:.(?:AM|PM))?\)/) { |m| completed_date = m.join }
+        updated_line = line.gsub(/\(\d{4}-\d{2}-\d{2} \d{2}:\d{2}(?:.(?:AM|PM))?\)/, "(#{completed_date})")
         @lines[n] = updated_line
         cleaned += 1
         @is_updated = true
@@ -1048,10 +1049,10 @@ class NPFile
             # New repeat date = due date + interval
             # look for the due date (<YYYY-MM-DD)
             due_date = ''
-            if updated_line =~ /<\d{4}\-\d{2}\-\d{2}/
-              updated_line.scan(/<(\d{4}\-\d{2}\-\d{2})/) { |m| due_date = m.join }
+            if updated_line =~ /<\d{4}-\d{2}-\d{2}/
+              updated_line.scan(/<(\d{4}-\d{2}-\d{2})/) { |m| due_date = m.join }
               # need to remove the old due date (and preceding whitespace)
-              updated_line = updated_line.gsub(/\s*<\d{4}\-\d{2}\-\d{2}/, '')
+              updated_line = updated_line.gsub(/\s*<\d{4}-\d{2}-\d{2}/, '')
             else
               # but if there is no due date then treat that as today
               due_date = completed_date
