@@ -1,9 +1,9 @@
 #!/usr/bin/ruby
 #-------------------------------------------------------------------------------
 # Script to Save some Media notes into NotePlan
-# by Jonathan Clark, v0.2.1, 5.2.2021
+# by Jonathan Clark, v0.2.3, 20.2.2021
 #-------------------------------------------------------------------------------
-VERSION = "0.2.1"
+VERSION = "0.2.3"
 require 'date'
 require 'cgi'
 require 'colorize'
@@ -65,7 +65,7 @@ ErrorColour = :light_red
 time_now = Time.now
 $date_time_now_log_fmttd = time_now.strftime(DATE_TIME_LOG_FORMAT)
 $date_time_now_file_fmttd = time_now.strftime(DATE_TIME_APPEND_FORMAT)
-$verbose = 0
+$verbose = false
 $npfile_count = 0
 
 #-------------------------------------------------------------------------
@@ -118,7 +118,7 @@ class NPCalFile
       f = File.open(@filename, 'r', encoding: 'utf-8')
       f.each_line do |line|
         @lines[n] = line
-        log_message_screen(" #{n}: #{line}")
+        # log_message_screen(" #{n}: #{line}")
         @media_header_line = n  if line =~ /^#+\s+Media/
         n += 1
       end
@@ -134,22 +134,30 @@ class NPCalFile
     # Insert 'line' into position 'line_number'
     # NB: this is insertion at the line number, so that current line gets moved to be one later
     n = @line_count # start iterating from the end of the array
+    line_number = n if line_number >= n # don't go beyond current size of @lines
     log_message_screen("  insert_new_line at #{line_number} (count=#{n}) ...")
-    # while n >= line_number
-    #   @lines[n + 1] = @lines[n]
-    #   n -= 1
-    # end
-    # @lines[line_number] = new_line
     @lines.insert(line_number, new_line)
     @line_count = @lines.size
   end
 
-  def append_media_header
-    # Add '### Media' on end, and update counts
-    log_message_screen('  append_media_header ...')
-    insert_new_line('', @line_count)
-    insert_new_line('### Media', @line_count)
-    @media_header_line = @line_count
+  def append_to_media_section(new_line)
+    # If @media_header_line is zero, then first append a Media H3 header
+    log_message_screen("  append_to_media_section where media header at #{@media_header_line} (count=#{@line_count}) ...")
+    if @media_header_line.zero?
+      insert_new_line('### Media', @line_count) 
+      @media_header_line = @line_count
+    end
+    n = @media_header_line + 1
+    added = false
+    while n < @line_count && !added
+      line = @lines[n].chomp
+      if line.empty? || line =~ /^#+\s/ # if an empty line or a new header section starting, insert here
+        insert_new_line(new_line, n)
+        added = true
+      end
+      n += 1
+    end
+    insert_new_line(new_line, n) unless added # if not added so far, then now append
   end
 
   def rewrite_cal_file
@@ -206,8 +214,7 @@ def process_spotify
         this_note = NPCalFile.new(date_YYYYMMDD)
 
         # Add new lines to end of file, creating a ### Media section before it if it doesn't exist
-        this_note.append_media_header if this_note.media_header_line.zero?
-        this_note.insert_new_line(line_to_add, this_note.line_count)
+        this_note.append_to_media_section(line_to_add)
         this_note.rewrite_cal_file
         main_message_screen("-> Saved new Spotify fave to #{date_YYYYMMDD}")
       end
@@ -264,8 +271,7 @@ def process_instapaper
         this_note = NPCalFile.new(date_YYYYMMDD)
 
         # Add new lines to end of file, creating a ### Media section before it if it doesn't exist
-        this_note.append_media_header if this_note.media_header_line.zero?
-        this_note.insert_new_line(line_to_add, this_note.line_count)
+        this_note.append_to_media_section(line_to_add)
         this_note.rewrite_cal_file
         main_message_screen("-> Saved new Instapaper item to #{date_YYYYMMDD}")
       end
@@ -320,8 +326,7 @@ def process_twitter
         this_note = NPCalFile.new(date_YYYYMMDD)
 
         # Add new lines to end of file, creating a ### Media section before it if it doesn't exist
-        this_note.append_media_header if this_note.media_header_line.zero?
-        this_note.insert_new_line(line_to_add, this_note.line_count)
+        this_note.append_to_media_section(line_to_add)
         this_note.rewrite_cal_file
         main_message_screen("-> Saved new Twitter item to #{date_YYYYMMDD}")
       end
@@ -365,12 +370,12 @@ opt_parser = OptionParser.new do |opts|
     options[:twitter] = true
   end
   opts.on('-v', '--verbose', 'Show information as I work') do
-    options[:verbose] = true
+    $verbose = true
   end
 end
 opt_parser.parse! # parse out options, leaving file patterns to process
 
-log_message_screen("Starting npSaveMedia at #{$date_time_now_log_fmttd}.")
+log_message_screen("Starting npSaveMedia at #{$date_time_now_log_fmttd}")
 process_instapaper if options[:instapaper]
 process_spotify if options[:spotify]
 process_twitter if options[:twitter]
