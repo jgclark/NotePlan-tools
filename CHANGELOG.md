@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## v1.9.3, 23.1.2021
+- [Fix] Fixed cosmetic bug in moving titled section from daily notes to a project note
+- [Fix] Removed stray `>dates` when creating new `@repeat(...)`s
+
 ## v1.9.2, 14.2.2021
 - [New] Now allow for `>date` events to be moved to from one daily to the one it points to. This has to be activated with the `-m` option, as it will be quite a significant change for some users.
 

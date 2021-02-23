@@ -1,12 +1,12 @@
 #!/usr/bin/ruby
 #-------------------------------------------------------------------------------
 # NotePlan Tools script
-# by Jonathan Clark, v1.9.2, 15.2.2021
+# by Jonathan Clark, v1.9.3, 23.2.2021
 #-------------------------------------------------------------------------------
 # See README.md file for details, how to run and configure it.
 # Repository: https://github.com/jgclark/NotePlan-tools/
 #-------------------------------------------------------------------------------
-VERSION = "1.9.2"
+VERSION = "1.9.3"
 
 require 'date'
 require 'time'
@@ -529,7 +529,7 @@ class NPFile
 
         # Remove any tags from the TagsToRemove list. Iterate over that array:
         TAGS_TO_REMOVE.each do |tag|
-          if (@lines[n] =~ /#{tag}/)
+          if @lines[n] =~ /#{tag}/
             @lines[n].gsub!(/ #{tag}/, '')
             cleaned += 1
           end
@@ -699,7 +699,7 @@ class NPFile
       is_header = line =~ /^#+\s+.*/ ? true : false
 
       # the following regex matches returns an array with one item, so make a string (by join)
-      # NOTE: thisthe '+?' gets minimum number of chars, to avoid grabbing contents of several [[notes]] in the same line
+      # NOTE: this '+?' gets minimum number of chars, to avoid grabbing contents of several [[notes]] in the same line
       if line =~ /\[\[.+\]\]/
         line.scan(/\[\[(.+?)\]\]/) { |m| noteName = m.join }
         puts "  - found note link [[#{noteName}]] in header on line #{n + 1} of #{@line_count}" if is_header && ($verbose > 0)
@@ -721,7 +721,7 @@ class NPFile
         # So incrementally add lines until we find that break.
         header_marker = ''
         line.scan(/^(#+)\s/) { |m| header_marker = m.join }
-        lines_to_output = line + '\n'
+        lines_to_output = "#{line}\n"
         @lines.delete_at(n)
         @line_count -= 1
         moved += 1
@@ -1007,7 +1007,7 @@ class NPFile
   end
 
   def process_repeats_and_done
-    # Process any completed (or cancelled) tasks with @repeat(..) tags,
+    # Process any completed (or cancelled) tasks with my extended @repeat(..) tags,
     # and also remove the HH:MM portion of any @done(...) tasks.
     #
     # When interval is of the form +2w it will duplicate the task for 2 weeks
@@ -1036,7 +1036,8 @@ class NPFile
         @lines[n] = updated_line
         cleaned += 1
         @is_updated = true
-        if updated_line =~ /@repeat\(.*\)/
+        # Test if this is one of my special extended repeats (i.e. no / in it)
+        if updated_line =~ /@repeat\([^\/]*\)/
           # get repeat to apply
           date_interval_string = ''
           updated_line.scan(/@repeat\((.*?)\)/) { |mm| date_interval_string = mm.join }
@@ -1047,12 +1048,12 @@ class NPFile
             puts "      Adding from completed date --> #{new_repeat_date}" if $verbose > 1
           else
             # New repeat date = due date + interval
-            # look for the due date (<YYYY-MM-DD)
+            # look for the due date (>YYYY-MM-DD)
             due_date = ''
-            if updated_line =~ /<\d{4}-\d{2}-\d{2}/
-              updated_line.scan(/<(\d{4}-\d{2}-\d{2})/) { |m| due_date = m.join }
+            if updated_line =~ />\d{4}-\d{2}-\d{2}/
+              updated_line.scan(/>(\d{4}-\d{2}-\d{2})/) { |m| due_date = m.join }
               # need to remove the old due date (and preceding whitespace)
-              updated_line = updated_line.gsub(/\s*<\d{4}-\d{2}-\d{2}/, '')
+              updated_line = updated_line.gsub(/\s*>\d{4}-\d{2}-\d{2}/, '')
             else
               # but if there is no due date then treat that as today
               due_date = completed_date
@@ -1067,6 +1068,10 @@ class NPFile
           updated_line_without_done = updated_line_without_done.gsub(/@done\(.*\)/, '')
           # Replace the * [x] text with * [>]
           updated_line_without_done = updated_line_without_done.gsub(/\[x\]/, '[>]')
+          # also remove multiple >dates that stack up on repeats
+          updated_line_without_done = updated_line_without_done.gsub(/\s+>\d{4}-\d{2}-\d{2}/, '')
+          # finally remove any extra trailling whitespace
+          updated_line_without_done.rstrip!
           outline = "#{updated_line_without_done} >#{new_repeat_date}"
 
           # Insert this new line after current line
