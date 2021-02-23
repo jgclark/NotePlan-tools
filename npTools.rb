@@ -1,12 +1,12 @@
 #!/usr/bin/ruby
 #-------------------------------------------------------------------------------
 # NotePlan Tools script
-# by Jonathan Clark, v1.9.3, 23.2.2021
+# by Jonathan Clark, v1.9.4, 23.2.2021
 #-------------------------------------------------------------------------------
 # See README.md file for details, how to run and configure it.
 # Repository: https://github.com/jgclark/NotePlan-tools/
 #-------------------------------------------------------------------------------
-VERSION = "1.9.3"
+VERSION = "1.9.4"
 
 require 'date'
 require 'time'
@@ -18,7 +18,6 @@ require 'optparse' # more details at https://docs.ruby-lang.org/en/2.1.0/OptionP
 # Setting variables to tweak
 #-------------------------------------------------------------------------------
 hours_to_process = 24 # by default will process all files changed within this number of hours
-NUM_HEADER_LINES = 4 # suits my use, but probably wants to be 1 for most people
 TAGS_TO_REMOVE = ['#waiting', '#high', '#started', '#⭐'].freeze # simple array of strings
 DATE_TIME_LOG_FORMAT = '%e %b %Y %H:%M'.freeze # only used in logging
 RE_DATE_FORMAT_CUSTOM = '\d{1,2}[\-\.//][01]?\d[\-\.//]\d{4}'.freeze # regular expression of alternative format used to find dates in templates. This matches DD.MM.YYYY and similar.
@@ -301,13 +300,13 @@ class NPFile
   #   object # implicit return
   # end
 
-  def append_new_line(new_line)
-    # Append 'new_line' into position
-    # TODO: should ideally split on '\n' and add each potential line separately
-    puts '  append_new_line ...' if $verbose > 1
-    @lines << new_line
-    @line_count = @lines.size
-  end
+  # def append_new_line(new_line)
+  #   # Append 'new_line' into position
+  #   # TODO: should ideally split on '\n' and add each potential line separately
+  #   puts '  append_new_line ...' if $verbose > 1
+  #   @lines << new_line
+  #   @line_count = @lines.size
+  # end
 
   def create_events_from_timeblocks
     # Create calendar event in default calendar from an NP timeblock given in
@@ -498,16 +497,50 @@ class NPFile
     puts "  - removed #{cleaned} empty lines" if $verbose > 0
   end
 
-  def insert_new_line(new_line, line_number)
+  def insert_new_line_at_line(new_line, line_number)
     # Insert 'new_line' into position 'line_number'
-    puts '  insert_new_line ...' if $verbose > 1
+    puts '  insert_new_line_at_line ...' if $verbose > 1
     n = @line_count # start iterating from the end of the array
     line_number = n if line_number >= n # don't go beyond current size of @lines
-    # while n >= line_number
-    #   @lines[n + 1] = @lines[n]
-    #   n -= 1
-    # end
-    # @lines[line_number] = new_line
+    @lines.insert(line_number, new_line)
+    @line_count = @lines.size
+  end
+
+  def insert_new_line_in_section(new_line, section_heading)
+    # Insert 'new_line' at start of a section headed 'section_heading'
+    # If this is blank, then insert after start-of-note metadata
+    puts "  insert_new_line_in_section '#{section_heading}' ..." if $verbose > 1
+    max = @lines.size
+    line_number = max # as a fallback treat this as an append
+    if section_heading.empty?
+      n = 0 # start iterating from the start of line of he file
+      in_frontmatter = false
+      while n <= max
+        this_line = @lines[n].chomp
+        # if we have a blank line or the end of a YAML frontmatter section
+        if this_line.empty? || in_frontmatter && (this_line =~ /^\.\.\./ || this_line =~ /^---/)
+          line_number = n + 1 # point to next line
+          break # stop looking
+        end
+        in_frontmatter = true if this_line =~ /^---/
+        # if we have a section heading or end of a YAML frontmatter section
+        if this_line =~ /^##+\s+/
+          line_number = n # point to this line (inserts before it)
+          break # stop looking
+        end
+        n += 1
+      end
+    else # we want to find the section heading
+      while n <= max
+        if @lines[n] =~ /^##+\s+#{section_heading}/
+          line_number = n + 1 # point to line after title
+          break # stop looking
+        end
+        n += 1
+      end
+    end
+    # don't go beyond current size of @lines
+    line_number = line_number <= max ? line_number : max
     @lines.insert(line_number, new_line)
     @line_count = @lines.size
   end
@@ -544,7 +577,7 @@ class NPFile
   end
 
   def remove_rescheduled
-    # TODO: is this working OK?
+    # FIXME: all this needs checking
     # remove [>] tasks from calendar notes, as there will be a duplicate
     # (whether or not the 'Append links when scheduling' option is set or not)
     puts '  remove_rescheduled ...' if $verbose > 1
@@ -570,28 +603,20 @@ class NPFile
     # Checks whether the note exists and if not, creates one first at top level.
     puts '  move_daily_ref_to_daily ...' if $verbose > 1
     # noteToAddTo = nil
-    n = 0
+    n = -1
     moved = 0
     while n < @line_count
+      n += 1
       line = @lines[n]
-      # find lines with >date mentions
-      if line !~ /\s>\d{4}\d{2}-\d{2}/
-        # this line doesn't match, so break out of loop and go to look at next line
-        n += 1
-        next
-      end
-
-      # is_header = line =~ /^#+\s+.*/ ? true : false
+      # only continue with this line if has a >date mention
+      next unless line =~ /\s>\d{4}-\d{2}-\d{2}/
 
       # the following regex matches returns an array with one item, so make a string (by join)
-      # NOTE: thisthe '+?' gets minimum number of chars, to avoid grabbing contents of several [[notes]] in the same line
-      if line =~ /\s>\d{4}-\d{2}-\d{2}/
-        yyyy_mm_dd = ''
-        line.scan(/>(\d{4}-\d{2}-\d{2})/) { |m| yyyy_mm_dd = m.join }
-        # puts "  - found calendar link >#{yyyy_mm_dd} in header on line #{n + 1} of #{@line_count}" if is_header && ($verbose > 0)
-        puts "  - found calendar link >#{yyyy_mm_dd} in notes on line #{n + 1} of #{@line_count}" if $verbose > 0 # && !is_header
-        yyyymmdd = "#{yyyy_mm_dd[0..3]}#{yyyy_mm_dd[5..6]}#{yyyy_mm_dd[8..9]}"
-      end
+      # NOTE: the '+?' gets minimum number of chars, to avoid grabbing contents of several [[notes]] in the same line
+      yyyy_mm_dd = ''
+      line.scan(/>(\d{4}-\d{2}-\d{2})/) { |m| yyyy_mm_dd = m.join }
+      puts "  - found calendar link >#{yyyy_mm_dd} in notes on line #{n + 1} of #{@line_count}" if $verbose > 0
+      yyyymmdd = "#{yyyy_mm_dd[0..3]}#{yyyy_mm_dd[5..6]}#{yyyy_mm_dd[8..9]}"
 
       # Find the existing daily note to add to, or read in, or create
       noteToAddTo = find_or_create_daily_note(yyyymmdd)
@@ -666,9 +691,8 @@ class NPFile
         end
       end
 
-      # append updated line(s) in the daily note file
-      puts "    - appending line to daily note id #{noteToAddTo} ..."
-      $allNotes[noteToAddTo].append_new_line(lines_to_output)
+      # insert updated line(s) in the daily note file after header
+      $allNotes[noteToAddTo].insert_new_line_in_section(lines_to_output, '')
 
       # write the note file out
       $allNotes[noteToAddTo].rewrite_file
@@ -777,7 +801,7 @@ class NPFile
       end
 
       # insert updated line(s) after header lines in the note file
-      $allNotes[noteToAddTo].insert_new_line(lines_to_output, NUM_HEADER_LINES)
+      $allNotes[noteToAddTo].insert_new_line_in_section(lines_to_output, '')
 
       # write the note file out
       $allNotes[noteToAddTo].rewrite_file
@@ -1076,7 +1100,7 @@ class NPFile
 
           # Insert this new line after current line
           n += 1
-          insert_new_line(outline, n)
+          insert_new_line_at_line(outline, n)
         end
       end
       n += 1

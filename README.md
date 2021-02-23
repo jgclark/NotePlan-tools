@@ -14,7 +14,7 @@ It **tidies up** data files, by:
 6. removing any multiple consecutive blank lines.
 
 ### Move or File notes
-The script moves any Daily (Calendar) note entries with a `[[Note title]]` in it to the mentioned note, **filing** them directly after the header section. 
+The script moves any Daily (Calendar) note entries with **a `[[Note title]]`** in it to the mentioned note, **filing** them directly after the header section. 
 
 In more detail:
 - where the line is a heading, it moves the heading and all following lines until a blank line, or the next heading of the same level
@@ -24,7 +24,7 @@ In more detail:
 
 This feature can be turned off using the `-n` option.  
 
-(From v1.9.2) The script can now move any Daily (Calendar) note entries with a `>date` in it to the end of the mentioned Daily note. To do so requires turning on through the `-m` option.
+(From v1.9.2) The script can now move any Daily (Calendar) note entries with **a `>date`** in it to the end of the mentioned Daily note. To do so requires turning on through the `-m` option.
 
 In more detail:
 - where the line is a heading, it moves the heading and all following lines until a blank line, or the next heading of the same level
@@ -126,7 +126,6 @@ It works with all 3 storage options for storing NotePlan data: CloudKit (the def
 4. Make the script executable (`chmod 755 npTools.rb`)
 5. Change the following constants at the top of the script, as required:
 - `hours_to_process`: will process all files changed within this number of hours (default 24)
-- `NUM_HEADER_LINES`: number of lines at the start of a note file to regard as the header. The default is 1. Relevant when moving lines around.
 - `TAGS_TO_REMOVE`: list of tags to remove. Default ["#waiting","#high"]
 - `DATE_TIME_LOG_FORMAT`: date string format to use in logs
 - `DATE_TIME_APPLESCRIPT_FORMAT`: date string format to use in AppleScript for event creation -- depends on various locale settings
