@@ -150,18 +150,11 @@ begin
     end
     f.close
 
-<<<<<<< Updated upstream
-    # line_count = lines.size # e.g. for lines 0-2 size => 3
-    puts "  Read file '#{this_file}' and ignore before/after = #{ignore_before} / #{ignore_after}"
-=======
     #TODO: Go through lines again, this time removing blank lines after headings
     # and inserting blank lines before headings (if needed)
 
-
-
-    line_count = lines.size # e.g. for lines 0-2 size => 3
-    puts "  Read file '#{this_file}'"
->>>>>>> Stashed changes
+    # line_count = lines.size # e.g. for lines 0-2 size => 3
+    puts "  Read file '#{this_file}' and ignore before/after = #{ignore_before} / #{ignore_after}"
 
     #-------------------------------------------------------------------------
     # write out this updated file, as a markdown file
