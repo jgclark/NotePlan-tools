@@ -59,17 +59,18 @@ options = {}
 opt_parser = OptionParser.new do |opts|
   opts.banner = "Tidy web clippings v#{VERSION}"
   opts.separator ''
-  # options[:instapaper] = false
   opts.on('-h', '--help', 'Show this help') do
     puts opts
     exit
   end
-  opts.on('-v', '--verbose', 'Show information as I work [on by default at the moment]') do
+  options[:verbose] = false
+  opts.on('-v', '--verbose', 'Show information as I work') do
     options[:verbose] = true
     $verbose = true
   end
 end
 opt_parser.parse! # parse out options, leaving file patterns to process
+$verbose = options[:verbose]
 
 puts "Starting to tidy web clippings at #{$date_time_now_log_fmttd}."
 
@@ -149,8 +150,18 @@ begin
     end
     f.close
 
+<<<<<<< Updated upstream
     # line_count = lines.size # e.g. for lines 0-2 size => 3
     puts "  Read file '#{this_file}' and ignore before/after = #{ignore_before} / #{ignore_after}"
+=======
+    #TODO: Go through lines again, this time removing blank lines after headings
+    # and inserting blank lines before headings (if needed)
+
+
+
+    line_count = lines.size # e.g. for lines 0-2 size => 3
+    puts "  Read file '#{this_file}'"
+>>>>>>> Stashed changes
 
     #-------------------------------------------------------------------------
     # write out this updated file, as a markdown file
