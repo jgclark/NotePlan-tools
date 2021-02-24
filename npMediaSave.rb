@@ -1,7 +1,7 @@
 #!/usr/bin/ruby
 #-------------------------------------------------------------------------------
 # Script to Save some Media notes into NotePlan
-# by Jonathan Clark, v0.2.3, 20.2.2021
+# by Jonathan Clark, v0.2.3, 24.2.2021
 #-------------------------------------------------------------------------------
 VERSION = "0.2.3"
 require 'date'
@@ -136,9 +136,10 @@ class NPCalFile
     @line_count = @lines.size
   end
 
-  def append_to_section(new_line, section_heading)
-    # Append new_line after 'section_heading' line. If not found, then add 'section_heading' to the end first
-    log_message_screen("  append_to_section for '#{section_heading}' ...")
+  def append_line_to_section(new_line, section_heading)
+    # Append new_line after 'section_heading' line.
+    # If not found, then add 'section_heading' to the end first
+    log_message_screen("  append_line_to_section for '#{section_heading}' ...")
     n = 0
     added = false
     found_section = false
@@ -212,7 +213,7 @@ def process_spotify
         this_note = NPCalFile.new(date_YYYYMMDD)
 
         # Add new lines to end of file, creating a ### Media section before it if it doesn't exist
-        this_note.append_to_section(line_to_add, MEDIA_STRING)
+        this_note.append_line_to_section(line_to_add, MEDIA_STRING)
         this_note.rewrite_cal_file
         main_message_screen("-> Saved new Spotify fave to #{date_YYYYMMDD}")
       end
@@ -269,7 +270,7 @@ def process_instapaper
         this_note = NPCalFile.new(date_YYYYMMDD)
 
         # Add new lines to end of file, creating a ### Media section before it if it doesn't exist
-        this_note.append_to_section(line_to_add, MEDIA_STRING)
+        this_note.append_line_to_section(line_to_add, MEDIA_STRING)
         this_note.rewrite_cal_file
         main_message_screen("-> Saved new Instapaper item to #{date_YYYYMMDD}")
       end
@@ -324,7 +325,7 @@ def process_twitter
         this_note = NPCalFile.new(date_YYYYMMDD)
 
         # Add new lines to end of file, creating a ### Media section before it if it doesn't exist
-        this_note.append_to_section(line_to_add, MEDIA_STRING)
+        this_note.append_line_to_section(line_to_add, MEDIA_STRING)
         this_note.rewrite_cal_file
         main_message_screen("-> Saved new Twitter item to #{date_YYYYMMDD}")
       end
@@ -372,15 +373,6 @@ opt_parser = OptionParser.new do |opts|
   end
 end
 opt_parser.parse! # parse out options, leaving file patterns to process
-
-#------------------------------
-# Test for append_to_section
-# this_note = NPCalFile.new("20210223")
-# # Add new lines to end of file, creating a ### Media section before it if it doesn't exist
-# this_note.append_to_section('### Tasks', "> test line to add 1\n- test line to add 2")
-# this_note.rewrite_cal_file
-# quit
-#------------------------------
 
 log_message_screen("Starting npSaveMedia at #{$date_time_now_log_fmttd}")
 process_instapaper if options[:instapaper]
