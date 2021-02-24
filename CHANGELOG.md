@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## v1.9.5, 24.1.2021
+- [Improve] The place where lines moved from daily notes are inserted is now smarter still.
+- [Fix] Bug introduced in refactoring in last release.
+
 ## v1.9.4, 23.1.2021
 - [Improve] The place where lines moved from daily notes are inserted is now smarter [Issue 39]. Note this removes the NUM_HEADER_LINES user-settable variable.
 

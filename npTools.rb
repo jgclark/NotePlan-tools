@@ -1,12 +1,12 @@
 #!/usr/bin/ruby
 #-------------------------------------------------------------------------------
 # NotePlan Tools script
-# by Jonathan Clark, v1.9.4, 24.2.2021
+# by Jonathan Clark, v1.9.5, 24.2.2021
 #-------------------------------------------------------------------------------
 # See README.md file for details, how to run and configure it.
 # Repository: https://github.com/jgclark/NotePlan-tools/
 #-------------------------------------------------------------------------------
-VERSION = "1.9.4"
+VERSION = "1.9.5"
 
 require 'date'
 require 'time'
@@ -55,7 +55,7 @@ RE_RESCHED_FROM_DATE = "<#{RE_DATE}" # find '<2021-02-23' etc.
 RE_DATE_INTERVAL = "[+\-]?\d+[bdwm]"
 RE_DATE_INTERVAL_CAPTURE = "(#{RE_DATE_INTERVAL})"
 RE_NOTE_LINK = '\[\[.+?\]\]' # find '[[note title]]' (not greedy)
-RE_NOTE_LINK_CAPTURE = '\[\[(.+?)\]\]/' # find '[[note title]]' (not greedy)
+RE_NOTE_LINK_CAPTURE = '\[\[(.+?)\]\]' # find '[[note title]]' (not greedy)
 
 # Colours to use with the colorization gem
 # to show some possible combinations, run  String.color_samples
@@ -528,22 +528,27 @@ class NPFile
 
   def insert_new_line_at_line(new_line, line_number)
     # Insert 'new_line' into position 'line_number'
-    puts '  insert_new_line_at_line ...' if $verbose > 1
-    n = @line_count # start iterating from the end of the array
-    line_number = n if line_number >= n # don't go beyond current size of @lines
-    @lines.insert(line_number, new_line)
+    # don't go beyond current size of @lines
+    n = line_number >= @lines.size ? @lines.size : line_number
+    puts "    insert_new_line_at_line #{n}..." if $verbose > 1
+    # break line up into separate lines (on "\n")
+    line_a = new_line.split("\n")
+    line_a.each do |line|
+      @lines.insert(n, line)
+      n += 1
+    end
     @line_count = @lines.size
   end
 
-  # TODO: Can this be renamed prepend to section?
-  def insert_new_line_in_section(new_line, section_heading)
+  def insert_new_line_at_start_of_section(new_line, section_heading)
     # Insert 'new_line' at start of a section headed 'section_heading'
     # If this is blank, then insert after start-of-note metadata
-    puts "  insert_new_line_in_section '#{section_heading}' ..." if $verbose > 1
+    puts "  insert_new_line_at_start_of_section '#{section_heading}' ..." if $verbose > 1
     max = @lines.size
     line_number = max # as a fallback treat this as an append
+    n = 0 # start iterating from the start of line of he file
     if section_heading.empty?
-      n = 0 # start iterating from the start of line of he file
+      # There's no section_heading to find, so insert after frontmatter
       in_frontmatter = false
       while n <= max
         this_line = @lines[n].chomp
@@ -569,20 +574,42 @@ class NPFile
         n += 1
       end
     end
-    # don't go beyond current size of @lines
-    line_number = line_number <= max ? line_number : max
-    @lines.insert(line_number, new_line)
-    @line_count = @lines.size
+    insert_new_line_at_line(new_line, line_number)
   end
 
-  # TODO: deal with blank heading case
-  def append_to_section(new_line, section_heading)
-    # Append new_line after 'section_heading' line. If not found, then add 'section_heading' to the end first
-    log_message_screen("  append_to_section for '#{section_heading}' ...")
+  # TODO: split into two cases; not sure one is really needed
+  def append_line_to_section(new_line, section_heading)
+    # Append new_line after 'section_heading' line.
+    # If not found, then add 'section_heading' to the end first
+    # If 'section_heading' is blank, then append in first section after frontmatter, informally defined (i.e. doesn't have to start with ---)
+    puts "  append_line_to_section for '#{section_heading}' ..." if $verbose > 1
     n = 0
-    added = false
+    max = @lines.size
+    line_number = max # as a fallback treat this as an append
     found_section = false
-    while !added && (n < @line_count)
+    if section_heading.empty?
+      # There's no section_heading to find, so find end of frontmatter instead
+      while n < max
+        this_line = @lines[n].chomp
+        # if we have a blank line or the end of a YAML frontmatter section
+        if this_line.empty? && (this_line =~ /^\.\.\./ || this_line =~ /^---/)
+          line_number = n # point to next line
+          break # stop looking
+        end
+        # if we have a section heading
+        if this_line =~ /^##+\s+/
+          line_number = n # point to this line (inserts before it)
+          break # stop looking
+        end
+        n += 1
+      end
+      found_section = true # we have found the equivalent of the section heading
+      n = line_number
+      # log_message_screen("    empty heading: insertion point at line #{n}")
+    end
+    # find the section heading
+    added = false
+    while !added && (n < max)
       line = @lines[n].chomp
       # if an empty line or a new header section starting, insert line here
       if found_section && (line.empty? || line =~ /^#+\s/)
@@ -593,9 +620,9 @@ class NPFile
       found_section = true if line =~ /^#{section_heading}/
       n += 1
     end
-    # log_message_screen("  section heading not found, so adding at line #{n}, #{@line_count}")
-    insert_new_line(section_heading, n) unless found_section # if section not yet found then add it before this line
-    insert_new_line(new_line, n + 1) unless added # if not added so far, then now append
+    puts "    final part with found_section #{found_section}, added #{added}" if $verbose > 1
+    insert_new_line_at_line(new_line, n) unless added # if not added so far, then now append
+    insert_new_line_at_line(section_heading, n) unless found_section # if section not yet found then add it before this line
   end
 
   def remove_unwanted_tags_dates
@@ -745,7 +772,7 @@ class NPFile
       end
 
       # insert updated line(s) in the daily note file in section DAILY_TASKS_SECTION_NAME (or after header if blank)
-      $allNotes[noteToAddTo].insert_new_line_in_section(lines_to_output, DAILY_TASKS_SECTION_NAME)
+      $allNotes[noteToAddTo].append_line_to_section(lines_to_output, DAILY_TASKS_SECTION_NAME)
 
       # write the note file out
       $allNotes[noteToAddTo].rewrite_file
@@ -761,7 +788,7 @@ class NPFile
     # Checks whether the note exists and if not, creates one first at top level.
 
     puts '  move_daily_ref_to_notes ...' if $verbose > 1
-    noteName = nil
+    note_name = nil
     n = 0
     moved = 0
     while n < @line_count
@@ -778,12 +805,12 @@ class NPFile
       # the following regex matches returns an array with one item, so make a string (by join)
       # NOTE: this '+?' gets minimum number of chars, to avoid grabbing contents of several [[notes]] in the same line
       if line =~ /#{RE_NOTE_LINK}/
-        line.scan(/#{RE_NOTE_LINK_CAPTURE}/) { |m| noteName = m.join }
-        puts "  - found note link [[#{noteName}]] in header on line #{n + 1} of #{@line_count}" if is_header && ($verbose > 0)
-        puts "  - found note link [[#{noteName}]] in notes on line #{n + 1} of #{@line_count}" if !is_header && ($verbose > 0)
+        line.scan(/#{RE_NOTE_LINK_CAPTURE}/) { |m| note_name = m.join }
+        puts "  - found note link [[#{note_name}]] in header on line #{n + 1} of #{@line_count}" if is_header && ($verbose > 0)
+        puts "  - found note link [[#{note_name}]] in notes on line #{n + 1} of #{@line_count}" if !is_header && ($verbose > 0)
       end
 
-      noteToAddTo = find_or_create_note(noteName)
+      noteToAddTo = find_or_create_note(note_name)
       lines_to_output = ''
 
       # Remove the [[name]] text by finding string points
@@ -854,7 +881,7 @@ class NPFile
       end
 
       # insert updated line(s) after header lines in the note file
-      $allNotes[noteToAddTo].insert_new_line_in_section(lines_to_output, '')
+      $allNotes[noteToAddTo].append_line_to_section(lines_to_output, '')
 
       # write the note file out
       $allNotes[noteToAddTo].rewrite_file
@@ -1299,6 +1326,17 @@ $quiet = options[:quiet]
 $verbose = $quiet ? 0 : options[:verbose] # if quiet, then verbose has to  be 0
 $archive = options[:archive]
 $remove_rescheduled = options[:remove_rescheduled]
+
+#------------------------------
+# Test for append_line_to_section
+# Dir.chdir(NP_CALENDAR_DIR)
+# this_note = NPFile.new("20210225.md")
+# # Add new lines to end of file, creating a ### Media section before it if it doesn't exist
+# this_note.append_line_to_section("> test line to add 1\n- test line to add 2", "")
+# this_note.append_line_to_section("> test line to add 3\n- test line to add 4", "### Tasks")
+# this_note.append_line_to_section("> test line to add 5\n- test line to add 6", "### Tasks")
+# this_note.rewrite_file
+# exit
 
 #--------------------------------------------------------------------------------------
 # Start by reading all Notes files in
