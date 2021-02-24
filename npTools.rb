@@ -1,7 +1,7 @@
 #!/usr/bin/ruby
 #-------------------------------------------------------------------------------
 # NotePlan Tools script
-# by Jonathan Clark, v1.9.4, 23.2.2021
+# by Jonathan Clark, v1.9.4, 24.2.2021
 #-------------------------------------------------------------------------------
 # See README.md file for details, how to run and configure it.
 # Repository: https://github.com/jgclark/NotePlan-tools/
@@ -19,8 +19,8 @@ require 'optparse' # more details at https://docs.ruby-lang.org/en/2.1.0/OptionP
 #-------------------------------------------------------------------------------
 hours_to_process = 24 # by default will process all files changed within this number of hours
 TAGS_TO_REMOVE = ['#waiting', '#high', '#started', '#⭐'].freeze # simple array of strings
+DAILY_TASKS_SECTION_NAME = '### Tasks' # set to a section heading you'd like to file tasks to in daily notes
 DATE_TIME_LOG_FORMAT = '%e %b %Y %H:%M'.freeze # only used in logging
-RE_DATE_FORMAT_CUSTOM = '\d{1,2}[\-\.//][01]?\d[\-\.//]\d{4}'.freeze # regular expression of alternative format used to find dates in templates. This matches DD.MM.YYYY and similar.
 # DATE_TIME_APPLESCRIPT_FORMAT = '%e %b %Y %I:%M %p'.freeze # format for creating Calendar events (via AppleScript) when Region setting is 12-hour clock
 DATE_TIME_APPLESCRIPT_FORMAT = '%e %b %Y %H:%M:%S'.freeze # format for creating Calendar events (via AppleScript) when Region setting is 24-hour clock
 CALENDAR_APP_TO_USE = 'Calendar' # Name of Calendar app to use in create_event AppleScript. Default is 'Calendar'.
@@ -32,7 +32,6 @@ NOTE_EXT = 'md' # or 'txt'
 # Other Constants & Settings
 #-------------------------------------------------------------------------------
 DATE_TODAY_FORMAT = '%Y%m%d'.freeze # using this to identify the "today" daily note
-RE_YYYY_MM_DD = '\d{4}[\-\.//][01]?\d[\-\.//]\d{1,2}' # built-in format for finding dates of form YYYY-MM-DD and similar
 USERNAME = ENV['LOGNAME'] # pull username from environment
 USER_DIR = ENV['HOME'] # pull home directory from environment
 DROPBOX_DIR = "#{USER_DIR}/Dropbox/Apps/NotePlan/Documents".freeze
@@ -43,6 +42,20 @@ np_base_dir = ICLOUDDRIVE_DIR if Dir.exist?(ICLOUDDRIVE_DIR) && Dir[File.join(IC
 np_base_dir = CLOUDKIT_DIR if Dir.exist?(CLOUDKIT_DIR) && Dir[File.join(CLOUDKIT_DIR, '**', '*')].count { |file| File.file?(file) } > 1
 NP_NOTES_DIR = "#{np_base_dir}/Notes".freeze
 NP_CALENDAR_DIR = "#{np_base_dir}/Calendar".freeze
+
+#-------------------------------------------------------------------------------
+# Regex definitions (where they're likely to be re-used)
+#-------------------------------------------------------------------------------
+RE_DATE = '\d{4}[\-\.//][01]?\d[\-\.//]\d{1,2}' # built-in format for finding dates of form YYYY-MM-DD and similar
+RE_DATE_TIME = "#{RE_DATE} \d{2}:\d{2}(?:.(?:AM|PM))?" # YYYY-MM-DD HH:MM[AM|PM]
+RE_DATE_FORMAT_CUSTOM = '\d{1,2}[\-\.//][01]?\d[\-\.//]\d{4}'.freeze # regular expression of alternative format used to find dates in templates. This matches DD.MM.YYYY and similar.
+RE_DUE_DATE = ">#{RE_DATE}" # find '>2021-02-23' etc.
+RE_DUE_DATE_CAPTURE = ">(#{RE_DATE})" # find ' >2021-02-23' and return just date part
+RE_RESCHED_FROM_DATE = "<#{RE_DATE}" # find '<2021-02-23' etc.
+RE_DATE_INTERVAL = "[+\-]?\d+[bdwm]"
+RE_DATE_INTERVAL_CAPTURE = "(#{RE_DATE_INTERVAL})"
+RE_NOTE_LINK = '\[\[.+?\]\]' # find '[[note title]]' (not greedy)
+RE_NOTE_LINK_CAPTURE = '\[\[(.+?)\]\]/' # find '[[note title]]' (not greedy)
 
 # Colours to use with the colorization gem
 # to show some possible combinations, run  String.color_samples
@@ -64,8 +77,24 @@ $date_today = time_now.strftime(DATE_TODAY_FORMAT)
 $npfile_count = -1 # number of NPFile objects created so far (incremented before first use)
 
 #-------------------------------------------------------------------------
-# Helper definitions
+# Helper functions
 #-------------------------------------------------------------------------
+
+def main_message_screen(message)
+  puts message.colorize(CompletedColour)
+end
+
+def warning_message_screen(message)
+  puts message.colorize(InfoColour)
+end
+
+def error_message_screen(message)
+  puts message.colorize(ErrorColour)
+end
+
+def log_message_screen(message)
+  puts message if $verbose
+end
 
 def calc_offset_date(old_date, interval)
   # Calculate next review date, assuming:
@@ -329,8 +358,8 @@ class NPFile
       # get date: if there's a >YYYY-MM-DD mentioned in the line, use that,
       # otherwise use date of calendar note. Format: YYYYMMDD, or else use today's date.
       event_date_s = ''
-      if this_line =~ />\d{4}-\d{2}-\d{2}/
-        this_line.scan(/>(\d{4}-\d{2}-\d{2})/) { |m| event_date_s = m.join.tr('-', '') }
+      if this_line =~ /#{RE_DUE_DATE}/
+        this_line.scan(/#{RE_DUE_DATE_CAPTURE}/) { |m| event_date_s = m.join.tr('-', '') }
         puts "    - found event creation date spec: #{event_date_s}" if $verbose > 1
       elsif @is_calendar
         event_date_s = @filename[0..7]
@@ -346,7 +375,7 @@ class NPFile
       event_title.gsub!(/^#+\s*/, '')
       event_title.gsub!(/\s\d\d?(-\d\d?)?(am|pm|AM|PM)/, '') # 3PM, 9-11am etc.
       event_title.gsub!(/\s\d\d?:\d\d(-\d\d?:\d\d)?(am|pm|AM|PM)?/, '') # 3:00PM, 9:00-9:45am etc.
-      event_title.gsub!(/>\d{4}-\d{2}-\d{2}/, '')
+      event_title.gsub!(/#{RE_DUE_DATE}/, '')
       event_title.gsub!(/\sat\s.*$/, '')
 
       # Get times for event.
@@ -506,6 +535,7 @@ class NPFile
     @line_count = @lines.size
   end
 
+  # TODO: Can this be renamed prepend to section?
   def insert_new_line_in_section(new_line, section_heading)
     # Insert 'new_line' at start of a section headed 'section_heading'
     # If this is blank, then insert after start-of-note metadata
@@ -532,7 +562,7 @@ class NPFile
       end
     else # we want to find the section heading
       while n <= max
-        if @lines[n] =~ /^##+\s+#{section_heading}/
+        if @lines[n] =~ /^#{section_heading}/
           line_number = n + 1 # point to line after title
           break # stop looking
         end
@@ -545,6 +575,29 @@ class NPFile
     @line_count = @lines.size
   end
 
+  # TODO: deal with blank heading case
+  def append_to_section(new_line, section_heading)
+    # Append new_line after 'section_heading' line. If not found, then add 'section_heading' to the end first
+    log_message_screen("  append_to_section for '#{section_heading}' ...")
+    n = 0
+    added = false
+    found_section = false
+    while !added && (n < @line_count)
+      line = @lines[n].chomp
+      # if an empty line or a new header section starting, insert line here
+      if found_section && (line.empty? || line =~ /^#+\s/)
+        insert_new_line(new_line, n)
+        added = true
+      end
+      # if this is the section header of interest, save its details. (Needs to come after previous test.)
+      found_section = true if line =~ /^#{section_heading}/
+      n += 1
+    end
+    # log_message_screen("  section heading not found, so adding at line #{n}, #{@line_count}")
+    insert_new_line(section_heading, n) unless found_section # if section not yet found then add it before this line
+    insert_new_line(new_line, n + 1) unless added # if not added so far, then now append
+  end
+
   def remove_unwanted_tags_dates
     # removes specific tags and >dates from complete or cancelled tasks
     puts '  remove_unwanted_tags_dates ...' if $verbose > 1
@@ -554,8 +607,8 @@ class NPFile
       if @lines[n] =~ /\[(x|-)\]/
         # remove any <YYYY-MM-DD on completed or cancelled tasks
         if $remove_rescheduled == 1
-          if @lines[n] =~ /\s<\d{4}-\d{2}-\d{2}/
-            @lines[n].gsub!(/\s<\d{4}-\d{2}-\d{2}/, '')
+          if @lines[n] =~ /\s#{RE_RESCHED_FROM_DATE}/
+            @lines[n].gsub!(/\s#{RE_RESCHED_FROM_DATE}/, '')
             cleaned += 1
           end
         end
@@ -609,7 +662,7 @@ class NPFile
       n += 1
       line = @lines[n]
       # only continue with this line if has a >date mention
-      next unless line =~ /\s>\d{4}-\d{2}-\d{2}/
+      next unless line =~ /#{RE_DUE_DATE}/
 
       # the following regex matches returns an array with one item, so make a string (by join)
       # NOTE: the '+?' gets minimum number of chars, to avoid grabbing contents of several [[notes]] in the same line
@@ -632,7 +685,7 @@ class NPFile
 
       if !is_header
         # If no due date is specified in rest of the line, add date from the title of the calendar file it came from
-        if line !~ />\d{4}-\d{2}-\d{2}/
+        if line !~ /#{RE_DUE_DATE}/
           cal_date = "#{@title[0..3]}-#{@title[4..5]}-#{@title[6..7]}"
           puts "    - '>#{cal_date}' to add from #{@title}" if $verbose > 1
           lines_to_output = line + " <#{cal_date}\n"
@@ -691,8 +744,8 @@ class NPFile
         end
       end
 
-      # insert updated line(s) in the daily note file after header
-      $allNotes[noteToAddTo].insert_new_line_in_section(lines_to_output, '')
+      # insert updated line(s) in the daily note file in section DAILY_TASKS_SECTION_NAME (or after header if blank)
+      $allNotes[noteToAddTo].insert_new_line_in_section(lines_to_output, DAILY_TASKS_SECTION_NAME)
 
       # write the note file out
       $allNotes[noteToAddTo].rewrite_file
@@ -714,7 +767,7 @@ class NPFile
     while n < @line_count
       line = @lines[n]
       # find lines with [[note title]] mentions
-      if line !~ /\[\[.+\]\]/
+      if line !~ /#{RE_NOTE_LINK}/
         # this line doesn't match, so break out of loop and go to look at next line
         n += 1
         next
@@ -724,8 +777,8 @@ class NPFile
 
       # the following regex matches returns an array with one item, so make a string (by join)
       # NOTE: this '+?' gets minimum number of chars, to avoid grabbing contents of several [[notes]] in the same line
-      if line =~ /\[\[.+\]\]/
-        line.scan(/\[\[(.+?)\]\]/) { |m| noteName = m.join }
+      if line =~ /#{RE_NOTE_LINK}/
+        line.scan(/#{RE_NOTE_LINK_CAPTURE}/) { |m| noteName = m.join }
         puts "  - found note link [[#{noteName}]] in header on line #{n + 1} of #{@line_count}" if is_header && ($verbose > 0)
         puts "  - found note link [[#{noteName}]] in notes on line #{n + 1} of #{@line_count}" if !is_header && ($verbose > 0)
       end
@@ -766,7 +819,7 @@ class NPFile
       else
         # This is not a header line.
         # If no due date is specified in rest of the line, add date from the title of the calendar file it came from
-        if line !~ />\d{4}-\d{2}-\d{2}/
+        if line !~ /#{RE_DUE_DATE}/
           cal_date = "#{@title[0..3]}-#{@title[4..5]}-#{@title[6..7]}"
           puts "    - '#{cal_date}' to add from #{@title}" if $verbose > 1
           lines_to_output = line + " >#{cal_date}\n"
@@ -892,7 +945,7 @@ class NPFile
     while n < searchLineLimit
       n += 1
       line = @lines[n]
-      next unless line =~ /\*\s*\[\-\]/ # TODO: change for different task markers
+      next unless line =~ /\*\s*\[-\]/ # TODO: change for different task markers
 
       # save this line number
       cancToMove.push(n)
@@ -973,7 +1026,7 @@ class NPFile
 
       # Try matching for the standard YYYY-MM-DD date pattern
       # (though check it's not got various characters before it, to defeat common usage in middle of things like URLs)
-      line.scan(/[^\d(<>\/-](#{RE_YYYY_MM_DD})/) { |m| date_string = m.join }
+      line.scan(/[^\d(<>\/-](#{RE_DATE})/) { |m| date_string = m.join }
       if date_string != ''
         # We have a date string to use for any offsets in the following section
         current_target_date = date_string
@@ -999,9 +1052,9 @@ class NPFile
         # find lines with {+3d} or {-4w} etc. plus {0d} special case
         # NB: this only deals with the first on any line; it doesn't make sense to have more than one.
         date_offset_string = ''
-        if line =~ /\{[+\-]?\d+[bdwm]\}/
+        if line =~ /\{#{RE_DATE_INTERVAL}\}/
           puts "    - Found line '#{line.chomp}'" if $verbose > 1
-          line.scan(/\{([+\-]?\d+[bdwm])\}/) { |m| date_offset_string = m.join }
+          line.scan(/\{(#{RE_DATE_INTERVAL_CAPTURE})\}/) { |m| date_offset_string = m.join }
           if date_offset_string != ''
             puts "      - Found DOS #{date_offset_string}' and last_was_template=#{last_was_template}" if $verbose > 1
             if current_target_date != ''
@@ -1053,10 +1106,10 @@ class NPFile
       completed_date = ''
       # find lines with date-time to shorten, and capture date part of it
       # i.e. @done(YYYY-MM-DD HH:MM[AM|PM])
-      if line =~ /@done\(\d{4}-\d{2}-\d{2} \d{2}:\d{2}(?:.(?:AM|PM))?\)/
+      if line =~ /@done\(#{RE_DATE_TIME}\)/
         # get completed date
         line.scan(/\((\d{4}-\d{2}-\d{2}) \d{2}:\d{2}(?:.(?:AM|PM))?\)/) { |m| completed_date = m.join }
-        updated_line = line.gsub(/\(\d{4}-\d{2}-\d{2} \d{2}:\d{2}(?:.(?:AM|PM))?\)/, "(#{completed_date})")
+        updated_line = line.gsub(/\(#{RE_DATE_TIME}\)/, "(#{completed_date})")
         @lines[n] = updated_line
         cleaned += 1
         @is_updated = true
@@ -1074,10 +1127,10 @@ class NPFile
             # New repeat date = due date + interval
             # look for the due date (>YYYY-MM-DD)
             due_date = ''
-            if updated_line =~ />\d{4}-\d{2}-\d{2}/
-              updated_line.scan(/>(\d{4}-\d{2}-\d{2})/) { |m| due_date = m.join }
+            if updated_line =~ /#{RE_DUE_DATE}/
+              updated_line.scan(/#{RE_DUE_DATE_CAPTURE}/) { |m| due_date = m.join }
               # need to remove the old due date (and preceding whitespace)
-              updated_line = updated_line.gsub(/\s*>\d{4}-\d{2}-\d{2}/, '')
+              updated_line = updated_line.gsub(/\s*#{RE_DUE_DATE}/, '')
             else
               # but if there is no due date then treat that as today
               due_date = completed_date
@@ -1093,7 +1146,7 @@ class NPFile
           # Replace the * [x] text with * [>]
           updated_line_without_done = updated_line_without_done.gsub(/\[x\]/, '[>]')
           # also remove multiple >dates that stack up on repeats
-          updated_line_without_done = updated_line_without_done.gsub(/\s+>\d{4}-\d{2}-\d{2}/, '')
+          updated_line_without_done = updated_line_without_done.gsub(/\s+#{RE_DUE_DATE}/, '')
           # finally remove any extra trailling whitespace
           updated_line_without_done.rstrip!
           outline = "#{updated_line_without_done} >#{new_repeat_date}"
