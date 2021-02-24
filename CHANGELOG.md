@@ -1,7 +1,7 @@
 # CHANGELOG
 
 ## v1.9.4, 23.1.2021
-- [Improve] The place where lines moved from daily notes are inserted is now smarter [Issue 39]
+- [Improve] The place where lines moved from daily notes are inserted is now smarter [Issue 39]. Note this removes the NUM_HEADER_LINES user-settable variable.
 
 ## v1.9.3, 23.1.2021
 - [Fix] Fixed cosmetic bug in moving titled section from daily notes to a project note
