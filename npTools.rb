@@ -1,12 +1,12 @@
 #!/usr/bin/ruby
 #-------------------------------------------------------------------------------
 # NotePlan Tools script
-# by Jonathan Clark, v1.9.5, 24.2.2021
+# by Jonathan Clark, v1.9.6, 25.2.2021
 #-------------------------------------------------------------------------------
 # See README.md file for details, how to run and configure it.
 # Repository: https://github.com/jgclark/NotePlan-tools/
 #-------------------------------------------------------------------------------
-VERSION = "1.9.5"
+VERSION = "1.9.6"
 
 require 'date'
 require 'time'
@@ -613,7 +613,7 @@ class NPFile
       line = @lines[n].chomp
       # if an empty line or a new header section starting, insert line here
       if found_section && (line.empty? || line =~ /^#+\s/)
-        insert_new_line(new_line, n)
+        insert_new_line_at_line(new_line, n)
         added = true
       end
       # if this is the section header of interest, save its details. (Needs to come after previous test.)
