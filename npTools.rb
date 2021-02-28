@@ -1,12 +1,12 @@
 #!/usr/bin/ruby
 #-------------------------------------------------------------------------------
 # NotePlan Tools script
-# by Jonathan Clark, v1.9.6, 25.2.2021
+# by Jonathan Clark, v1.9.7, 28.2.2021
 #-------------------------------------------------------------------------------
 # See README.md file for details, how to run and configure it.
 # Repository: https://github.com/jgclark/NotePlan-tools/
 #-------------------------------------------------------------------------------
-VERSION = "1.9.6"
+VERSION = "1.9.7"
 
 require 'date'
 require 'time'
@@ -44,16 +44,16 @@ NP_NOTES_DIR = "#{np_base_dir}/Notes".freeze
 NP_CALENDAR_DIR = "#{np_base_dir}/Calendar".freeze
 
 #-------------------------------------------------------------------------------
-# Regex definitions (where they're likely to be re-used)
+# Regex definitions (where they're likely to be re-used). NB need to be single quoted.
 #-------------------------------------------------------------------------------
 RE_DATE = '\d{4}[\-\.//][01]?\d[\-\.//]\d{1,2}' # built-in format for finding dates of form YYYY-MM-DD and similar
-RE_DATE_TIME = "#{RE_DATE} \d{2}:\d{2}(?:.(?:AM|PM))?" # YYYY-MM-DD HH:MM[AM|PM]
+RE_DATE_TIME = RE_DATE + ' \d{2}:\d{2}(?:.(?:AM|PM))?' # YYYY-MM-DD HH:MM[AM|PM]
 RE_DATE_FORMAT_CUSTOM = '\d{1,2}[\-\.//][01]?\d[\-\.//]\d{4}'.freeze # regular expression of alternative format used to find dates in templates. This matches DD.MM.YYYY and similar.
-RE_DUE_DATE = ">#{RE_DATE}" # find '>2021-02-23' etc.
-RE_DUE_DATE_CAPTURE = ">(#{RE_DATE})" # find ' >2021-02-23' and return just date part
-RE_RESCHED_FROM_DATE = "<#{RE_DATE}" # find '<2021-02-23' etc.
-RE_DATE_INTERVAL = "[+\-]?\d+[bdwm]"
-RE_DATE_INTERVAL_CAPTURE = "(#{RE_DATE_INTERVAL})"
+RE_DUE_DATE = '>' + RE_DATE # find '>2021-02-23' etc.
+RE_DUE_DATE_CAPTURE = '>(' + RE_DATE + ')' # find ' >2021-02-23' and return just date part
+RE_RESCHED_FROM_DATE = '<' + RE_DATE # find '<2021-02-23' etc.
+RE_DATE_INTERVAL = '[+\-]?\d+[bdwm]'
+RE_DATE_INTERVAL_CAPTURE = '(' + RE_DATE_INTERVAL + ')'
 RE_NOTE_LINK = '\[\[.+?\]\]' # find '[[note title]]' (not greedy)
 RE_NOTE_LINK_CAPTURE = '\[\[(.+?)\]\]' # find '[[note title]]' (not greedy)
 
