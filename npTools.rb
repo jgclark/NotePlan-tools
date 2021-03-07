@@ -1368,14 +1368,16 @@ if ARGV.count.positive?
       puts "  Looking for note filenames matching glob_pattern #{glob_pattern}:" if $verbose > 0
       Dir.glob(glob_pattern).each do |this_file|
         puts "  - #{this_file}" if $verbose > 0
+        next if File.zero?(this_file) # ignore if this file is empty
+
         # Note has already been read in; so now just find which one to point to, by matching filename
         $allNotes.each do |this_note|
           # copy the $allNotes item into $notes array
-          $notes << this_note if this_note.filename == this_file
+          if this_file == this_note.filename
+            $notes << this_note
+            puts "    -> found at $allNotes ID #{this_note.id}" if $verbose > 1
+          end
         end
-        next if File.zero?(this_file) # ignore if this file is empty
-
-        $notes << NPFile.new(this_file)
       end
     end
 
