@@ -1,9 +1,11 @@
 #!/usr/bin/ruby
 #-------------------------------------------------------------------------------
 # Script to Save some Media notes into NotePlan
-# by Jonathan Clark, v0.2.3, 24.2.2021
+# by Jonathan Clark, v0.3, 7.3.2021
+#
+# v0.3 now copes with multi-line tweets
 #-------------------------------------------------------------------------------
-VERSION = "0.2.3"
+VERSION = "0.3.0"
 require 'date'
 require 'cgi'
 require 'colorize'
@@ -25,7 +27,8 @@ DATE_TIME_LOG_FORMAT = '%e %b %Y %H:%M'.freeze # only used in logging
 DATE_TIME_APPEND_FORMAT = '%Y%m%d%H%M'.freeze
 
 #-------------------------------------------------------------------------------
-# To use test data instead of live data, uncomment relevant definitions:
+# To use test data instead of live data, uncomment relevant definitions.
+# NB: assumes one per line, apart from Twitter.
 #-------------------------------------------------------------------------------
 # $spotify_test_data = <<-END_S_DATA
 # February 6, 2021 at 11:11PM | Espen Eriksen Trio | In the Mountains | Never Ending January | https://ift.tt/2TRqQiB | https://ift.tt/2LptJng
@@ -309,12 +312,28 @@ def process_twitter
     end
 
     begin
+      needs_concatenating = false
+      previous_line = ''
       f.each_line do |line|
+        # Cope with tweets over several lines: concatenate with next line
+        if needs_concatenating
+          line = previous_line + line
+          log_message_screen("  Concatenated -> '#{line}' with next")
+          needs_concatenating = false
+        end
         # Parse each line
         parts = line.split(" | ")
+        # If we have less than 4 parts we'll need to join this into the next line
+        if parts.size < 4
+          needs_concatenating = true
+          previous_line = line.strip # remove whitespace (including the probable newline on the end)
+          log_message_screen("  Need to concatenate '#{line}' with next")
+          next
+        end
         # log_message_screen("  #{line} --> #{parts}")
         # parse the given date-time string, then create YYYYMMDD version of it
         date_YYYYMMDD = Date.parse(parts[0]).strftime('%Y%m%d')
+
         log_message_screen("  Found item to save with date #{date_YYYYMMDD}:")
 
         # Format line to add
@@ -328,6 +347,8 @@ def process_twitter
         this_note.append_line_to_section(line_to_add, MEDIA_STRING)
         this_note.rewrite_cal_file
         main_message_screen("-> Saved new Twitter item to #{date_YYYYMMDD}")
+        needs_concatenating = false
+        previous_line = ''
       end
 
       unless defined?($twitter_test_data)
