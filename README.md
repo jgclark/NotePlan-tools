@@ -1,7 +1,7 @@
 # NotePlan Tools
 `npTools.rb` is a Ruby script that adds functionality to the [NotePlan app](https://noteplan.co/). Particularly when run frequently, this provides a more flexible system for repeating tasks, allows for due dates to be expressed as offsets and therefore templates, moves items from Daily files to Note files, and creates events. It incorporates an earlier script to 'clean' or tidy up NotePlan's data files.
 
-Each time the script runs, it does a number of things, explain in each section
+Each time the script runs, it does a number of things, explained in each section:
 
 ### Tidy up
 
@@ -13,8 +13,19 @@ It **tidies up** data files, by:
 5. removing header lines without any content before the next header line of the same or higher level (i.e. fewer `#`s)
 6. removing any multiple consecutive blank lines.
 
-### Move or File notes
-The script moves any Daily (Calendar) note entries with **a `[[Note title]]`** in it to the mentioned note, **filing** them directly after the header section. 
+### Moves Daily (Calendar) note items
+(From v1.9.2) The script can now move any Daily note entries with a **`>date`** in it to the mentioned Daily note. To do so requires turning on through the `-m` option.
+
+In more detail:
+- where the line is a heading, it moves the heading and all following lines until a blank line, or the next heading of the same level
+- where the line isn't a heading, it moves the line and any following indented lines (optionally terminated by a blank line)
+- the lines are inserted after a section heading (e.g. '### Tasks') as defined in the DAILY_TASKS_SECTION_NAME constant (or after header if this is blank). (To configure this constant, see below.)
+- where the note for the mentioned `>date` doesn't exist, it is created first
+
+NB: This only operates from Daily (Calendar) notes; it therefore doesn't interfere with **linking and back-linking** between main notes.
+
+### Files Daily (Calendar) note items
+The script moves any Daily note entries with **a `[[Note title]]`** in it to the mentioned note, **filing** them directly after the header section. 
 
 In more detail:
 - where the line is a heading, it moves the heading and all following lines until a blank line, or the next heading of the same level
@@ -24,15 +35,7 @@ In more detail:
 
 This feature can be turned off using the `-n` option.  
 
-(From v1.9.2) The script can now move any Daily (Calendar) note entries with **a `>date`** in it to the mentioned Daily note. To do so requires turning on through the `-m` option.
-
-In more detail:
-- where the line is a heading, it moves the heading and all following lines until a blank line, or the next heading of the same level
-- where the line isn't a heading, it moves the line and any following indented lines (optionally terminated by a blank line)
-- the lines are inserted after a section heading (e.g. '### Tasks') as defined in the DAILY_TASKS_SECTION_NAME constant (or after header if this is blank)
-- where the note for the mentioned `>date` doesn't exist, it is created first
-
-NB: Both of these functions only operate from Daily (Calendar) notes; they therefore doesn't interfere with **linking and backlinking** between main notes.
+NB: This only operates from Daily (Calendar) notes; therefore it doesn't interfere with **linking and back-linking** between main notes.
 
 ### Templates for dates
 It changes any mentions of **date offset patterns** (such as `{-10d}`, `{+2w}`, `{-3m}`) into scheduled dates (e.g. `>2020-02-27`), if it can find a valid date pattern in the previous heading, previous main task if it has sub-tasks, or in the line itself. This allows for users to define simple **template sections** and copy and paste them into the note, set the due date at the start, and the other dates are then worked out for you.
@@ -143,7 +146,7 @@ The first time you attempt to `#create_event`, macOS (at least Catalina and Big 
 ### Automatic running
 If you wish to run this automatically in the background on macOS, you can do this using the built-in `launchctl` system. (For more info on this see for example [How to Use launchd to Run Services in macOS](https://medium.com/swlh/how-to-use-launchd-to-run-services-in-macos-b972ed1e352).)
 
-Here's the configuration file `jgc.npTools.plist` that I use to automatically run `npTools.rb` several times a day:
+Here's the configuration file `jgc.npTools.plist` that I use to automatically run `npTools.rb` three times a day:
 ```
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
