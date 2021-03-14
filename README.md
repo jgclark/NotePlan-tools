@@ -24,11 +24,12 @@ In more detail:
 
 This feature can be turned off using the `-n` option.  
 
-(From v1.9.2) The script can now move any Daily (Calendar) note entries with **a `>date`** in it to the end of the mentioned Daily note. To do so requires turning on through the `-m` option.
+(From v1.9.2) The script can now move any Daily (Calendar) note entries with **a `>date`** in it to the mentioned Daily note. To do so requires turning on through the `-m` option.
 
 In more detail:
 - where the line is a heading, it moves the heading and all following lines until a blank line, or the next heading of the same level
 - where the line isn't a heading, it moves the line and any following indented lines (optionally terminated by a blank line)
+- the lines are inserted after a section heading (e.g. '### Tasks') as defined in the DAILY_TASKS_SECTION_NAME constant (or after header if this is blank)
 - where the note for the mentioned `>date` doesn't exist, it is created first
 
 NB: Both of these functions only operate from Daily (Calendar) notes; they therefore doesn't interfere with **linking and backlinking** between main notes.
@@ -127,6 +128,7 @@ It works with all 3 storage options for storing NotePlan data: CloudKit (the def
 5. Change the following constants at the top of the script, as required:
 - `hours_to_process`: will process all files changed within this number of hours (default 24)
 - `TAGS_TO_REMOVE`: list of tags to remove. Default ["#waiting","#high"]
+- `DAILY_TASKS_SECTION_NAME`: the section heading name (without `#` marks) to file moved tasks in
 - `DATE_TIME_LOG_FORMAT`: date string format to use in logs
 - `DATE_TIME_APPLESCRIPT_FORMAT`: date string format to use in AppleScript for event creation -- depends on various locale settings
 - `CALENDAR_APP_TO_USE`: name of Calendar app to use in create_event AppleScript. Default is 'Calendar'. Can ignore if not using this for event creation.
