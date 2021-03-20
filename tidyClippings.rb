@@ -1,9 +1,9 @@
 #!/usr/bin/ruby
 #-------------------------------------------------------------------------------
 # Script to tidy and clean up HTML text clipped into markdown files
-# by Jonathan Clark, v1.1.0, 6.2.2021
+# by Jonathan Clark, v1.1.1, 20.3.2021
 #-------------------------------------------------------------------------------
-VERSION = "1.1.0"
+VERSION = "1.1.1"
 require 'date'
 require 'cgi'
 require 'colorize'
@@ -43,6 +43,10 @@ String.disable_colorization false
 CompletedColour = :light_green
 InfoColour = :yellow
 WarningColour = :light_red
+# Test to see if we're running interactively or in a batch mode:
+# if batch mode then disable colorisation which doesn't work in logs
+tty_code = `tty`.chomp
+String.disable_colorization true if tty_code == 'not a tty'
 
 # Variables that need to be globally available
 time_now = Time.now

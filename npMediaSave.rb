@@ -1,11 +1,11 @@
 #!/usr/bin/ruby
 #-------------------------------------------------------------------------------
 # Script to Save some Media notes into NotePlan
-# by Jonathan Clark, v0.3, 7.3.2021
+# by Jonathan Clark, v0.3.3, 20.3.2021
 #
 # v0.3 now copes with multi-line tweets
 #-------------------------------------------------------------------------------
-VERSION = "0.3.0"
+VERSION = "0.3.2"
 require 'date'
 require 'cgi'
 require 'colorize'
@@ -18,8 +18,9 @@ MEDIA_STRING = '### Media' # the title of the section heading to add these notes
 NOTE_EXT = "md" # or "txt"
 IFTTT_FILEPATH = "/Users/jonathan/Dropbox/IFTTT/"
 IFTTT_ARCHIVE_FILEPATH = "/Users/jonathan/Dropbox/IFTTT/Archive/"
-SPOTIFY_FILE = "Spotify Saved Tracks.txt"
 INSTAPAPER_FILE = "Instapaper Archived Items.txt"
+MEDIUM_FILE = "Medium Articles.txt"
+SPOTIFY_FILE = "Spotify Saved Tracks.txt"
 TWITTER_FILE = "My Tweets.txt"
 YOUTUBE_LIKES_FILE = "YouTube liked videos.txt"
 YOUTUBE_UPLOAD_FILE = "YouTube upload.txt"
@@ -60,10 +61,13 @@ NP_CALENDAR_DIR = "#{np_base_dir}/Calendar".freeze
 # Colours to use with the colorization gem
 # to show some possible combinations, run  String.color_samples
 # to show list of possible modes, run   puts String.modes  (e.g. underline, bold, blink)
-String.disable_colorization false
 CompletedColour = :light_green
 InfoColour = :yellow
 ErrorColour = :light_red
+# Test to see if we're running interactively or in a batch mode:
+# if batch mode then disable colorisation which doesn't work in logs
+tty_code = `tty`.chomp
+String.disable_colorization true if tty_code == 'not a tty'
 
 # Variables that need to be globally available
 time_now = Time.now
@@ -71,6 +75,7 @@ $date_time_now_log_fmttd = time_now.strftime(DATE_TIME_LOG_FORMAT)
 $date_time_now_file_fmttd = time_now.strftime(DATE_TIME_APPEND_FORMAT)
 $verbose = false
 $npfile_count = 0
+
 
 #-------------------------------------------------------------------------
 # Helper Functions
@@ -195,7 +200,7 @@ def process_spotify
         f = File.open(spotify_filepath, 'r', encoding: 'utf-8')
       end
     else
-      warning_message_screen("Spotify file not found")
+      warning_message_screen("No Spotify file found")
       throw :done
     end
 
@@ -250,7 +255,7 @@ def process_instapaper
         f = File.open(instapaper_filepath, 'r', encoding: 'utf-8')
       end
     else
-      warning_message_screen("Instapaper file not found")
+      warning_message_screen("No Instapaper file found")
       throw :done
     end
 
@@ -291,6 +296,62 @@ def process_instapaper
 end
 
 #--------------------------------------------------------------------------------------
+# MEDIUM articles
+#--------------------------------------------------------------------------------------
+def process_medium
+  medium_filepath = IFTTT_FILEPATH + MEDIUM_FILE
+  catch (:done) do  # provide a clean way out of this
+    if defined?($medium_test_data)
+      f = $medium_test_data
+      log_message_screen("Using Medium test data")
+    elsif File.exist?(medium_filepath)
+      if File.empty?(medium_filepath)
+        warning_message_screen("Note: Medium file empty")
+        throw :done
+      else
+        f = File.open(medium_filepath, 'r', encoding: 'utf-8')
+      end
+    else
+      warning_message_screen("No Medium file found")
+      throw :done
+    end
+
+    begin
+      f.each_line do |line|
+        # Parse each line
+        parts = line.split(" \\ ")
+        # log_message_screen("  #{line} --> #{parts}")
+        # parse the given date-time string, then create YYYYMMDD version of it
+        date_YYYYMMDD = Date.parse(parts[0]).strftime('%Y%m%d')
+        log_message_screen("  Found item to save with date #{date_YYYYMMDD}:")
+
+        # Format line to add. Guard against possible empty fields
+        parts[2] = '' if parts[2].nil?
+        line_to_add = "- #article **[#{parts[1].strip}](#{parts[2].strip})**"
+        log_message_screen(line_to_add)
+
+        # Read in the NP Calendar file for this date
+        this_note = NPCalFile.new(date_YYYYMMDD)
+
+        # Add new lines to end of file, creating a ### Media section before it if it doesn't exist
+        this_note.append_line_to_section(line_to_add, MEDIA_STRING)
+        this_note.rewrite_cal_file
+        main_message_screen("-> Saved new Medium item to #{date_YYYYMMDD}")
+      end
+
+      unless defined?($medium_test_data)
+        f.close
+        # Now rename file to same as above but _YYYYMMDDHHMM on the end
+        archive_filename = "#{IFTTT_ARCHIVE_FILEPATH}#{MEDIUM_FILE[0..-5]}_#{$date_time_now_file_fmttd}.txt"
+        File.rename(medium_filepath, archive_filename)
+      end
+    rescue StandardError => e
+      error_message_screen("ERROR: #{e.exception.message} when processing file #{MEDIUM_FILE}")
+    end
+  end
+end
+
+#--------------------------------------------------------------------------------------
 # TWITTER
 #--------------------------------------------------------------------------------------
 def process_twitter
@@ -307,7 +368,7 @@ def process_twitter
         f = File.open(twitter_filepath, 'r', encoding: 'utf-8')
       end
     else
-      warning_message_screen("Twitter file not found")
+      warning_message_screen("No Twitter file found")
       throw :done
     end
 
@@ -373,6 +434,7 @@ opt_parser = OptionParser.new do |opts|
   opts.banner = "NotePlan media adder v#{VERSION}" # \nDetails at https://github.com/jgclark/NotePlan-tools/\nUsage: npMediaSave.rb [options]"
   opts.separator ''
   options[:instapaper] = false
+  options[:medium] = false
   options[:spotify] = false
   options[:twitter] = false
   options[:verbose] = false
@@ -382,6 +444,9 @@ opt_parser = OptionParser.new do |opts|
   end
   opts.on('-i', '--instapaper', 'Add Instapaper records') do
     options[:instapaper] = true
+  end
+  opts.on('-m', '--medium', 'Add Medium records') do
+    options[:medium] = true
   end
   opts.on('-s', '--spotify', 'Add Spotify records') do
     options[:spotify] = true
@@ -397,5 +462,6 @@ opt_parser.parse! # parse out options, leaving file patterns to process
 
 log_message_screen("Starting npSaveMedia at #{$date_time_now_log_fmttd}")
 process_instapaper if options[:instapaper]
+process_medium if options[:medium]
 process_spotify if options[:spotify]
 process_twitter if options[:twitter]

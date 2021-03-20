@@ -1,12 +1,12 @@
 #!/usr/bin/ruby
 #-------------------------------------------------------------------------------
 # NotePlan Tools script
-# by Jonathan Clark, v1.9.7, 28.2.2021
+# by Jonathan Clark, v1.9.8, 20.3.2021
 #-------------------------------------------------------------------------------
 # See README.md file for details, how to run and configure it.
 # Repository: https://github.com/jgclark/NotePlan-tools/
 #-------------------------------------------------------------------------------
-VERSION = "1.9.7"
+VERSION = "1.9.8"
 
 require 'date'
 require 'time'
@@ -64,6 +64,10 @@ String.disable_colorization false
 CompletedColour = :light_green
 InfoColour = :yellow
 WarningColour = :light_red
+# Test to see if we're running interactively or in a batch mode:
+# if batch mode then disable colorisation which doesn't work in logs
+tty_code = `tty`.chomp
+String.disable_colorization true if tty_code == 'not a tty'
 
 # Variables that need to be globally available
 time_now = Time.now
