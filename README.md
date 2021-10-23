@@ -1,4 +1,7 @@
 # NotePlan Tools
+
+**Note: This is now a legacy project. Almost all of the capability of this script is now available through the Plugins I've written, and are available through NotePlan v3.  Please see [this overview](https://help.noteplan.co/article/65-commandbar-plugins), and the individual [plugins' details in the GitHub repository](https://github.com/NotePlan/plugins).**
+
 `npTools.rb` is a Ruby script that adds functionality to the [NotePlan app](https://noteplan.co/). Particularly when run frequently, this provides a more flexible system for repeating tasks, allows for due dates to be expressed as offsets and therefore templates, moves items from Daily files to Note files, and creates events. It incorporates an earlier script to 'clean' or tidy up NotePlan's data files.
 
 Each time the script runs, it does a number of things, explained in each section:
