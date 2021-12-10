@@ -1,11 +1,11 @@
-#!/usr/bin/ruby
+#!/usr/bin/env ruby
 #-------------------------------------------------------------------------------
 # Script to Save some Media notes into NotePlan
 # by Jonathan Clark, v0.3.3, 20.3.2021
 #
 # v0.3 now copes with multi-line tweets
 #-------------------------------------------------------------------------------
-VERSION = "0.3.2"
+VERSION = "0.3.3"
 require 'date'
 require 'cgi'
 require 'colorize'
@@ -460,7 +460,7 @@ opt_parser = OptionParser.new do |opts|
 end
 opt_parser.parse! # parse out options, leaving file patterns to process
 
-log_message_screen("Starting npSaveMedia at #{$date_time_now_log_fmttd}")
+log_message_screen("\nStarting npMediaSave at #{$date_time_now_log_fmttd}")
 process_instapaper if options[:instapaper]
 process_medium if options[:medium]
 process_spotify if options[:spotify]

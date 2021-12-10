@@ -1,12 +1,12 @@
-#!/usr/bin/ruby
+#!/usr/bin/env ruby
 #-------------------------------------------------------------------------------
 # NotePlan Tools script
-# by Jonathan Clark, v1.9.8, 20.3.2021
+# by Jonathan Clark, v2.1.0, 10.12.2021
 #-------------------------------------------------------------------------------
 # See README.md file for details, how to run and configure it.
 # Repository: https://github.com/jgclark/NotePlan-tools/
 #-------------------------------------------------------------------------------
-VERSION = "1.9.8"
+VERSION = "2.1.0"
 
 require 'date'
 require 'time'
@@ -314,7 +314,7 @@ class NPFile
       @is_today = @title == $date_today
     else
       # otherwise use first line (but take off heading characters at the start and starting and ending whitespace)
-      tempTitle = @lines[0].gsub(/^#+\s*/, '').gsub(/\s+$/, '')
+      tempTitle = @lines[0].gsub(/^#+\s*/, '').gsub(/\s+$/, '') # TODO: handle nil case
       @title = !tempTitle.empty? ? tempTitle : 'temp_header' # but check it doesn't get to be blank
       @is_calendar = false
       @is_today = false
@@ -629,9 +629,9 @@ class NPFile
     insert_new_line_at_line(section_heading, n) unless found_section # if section not yet found then add it before this line
   end
 
-  def remove_unwanted_tags_dates
+  def remove_finished_tags_dates
     # removes specific tags and >dates from complete or cancelled tasks
-    puts '  remove_unwanted_tags_dates ...' if $verbose > 1
+    puts '  remove_finished_tags_dates ...' if $verbose > 1
     n = cleaned = 0
     while n < @line_count
       # only do something if this is a completed or cancelled task
@@ -657,11 +657,11 @@ class NPFile
     return unless cleaned.positive?
 
     @is_updated = true
-    puts "  - removed #{cleaned} tags" if $verbose > 0
+    puts "  - removed #{cleaned} tags/dates" if $verbose > 0
   end
 
   def remove_rescheduled
-    # FIXME: all this needs checking
+    # TODO: all this needs checking
     # remove [>] tasks from calendar notes, as there will be a duplicate
     # (whether or not the 'Append links when scheduling' option is set or not)
     puts '  remove_rescheduled ...' if $verbose > 1
@@ -791,6 +791,8 @@ class NPFile
     # Move items in daily note with a [[note link]] to that note (inserting after header).
     # Checks whether the note exists and if not, creates one first at top level.
 
+    # TODO: should also check whether link is actually a date, and then do nothing.
+    
     puts '  move_daily_ref_to_notes ...' if $verbose > 1
     note_name = nil
     n = 0
@@ -1174,8 +1176,8 @@ class NPFile
           updated_line_without_done = updated_line.chomp
           # Remove the @done text
           updated_line_without_done = updated_line_without_done.gsub(/@done\(.*\)/, '')
-          # Replace the * [x] text with * [>]
-          updated_line_without_done = updated_line_without_done.gsub(/\[x\]/, '[>]')
+          # Replace the * [x] text with * [ ]
+          updated_line_without_done = updated_line_without_done.gsub(/\[x\]/, '[ ]')
           # also remove multiple >dates that stack up on repeats
           updated_line_without_done = updated_line_without_done.gsub(/\s+#{RE_DUE_DATE}/, '')
           # finally remove any extra trailling whitespace
@@ -1456,15 +1458,15 @@ if $notes.count.positive? # if we have some files to work on ...
     end
     puts " Processing file id #{note.id}: " + note.title.to_s.bold if $verbose > 0
     note.clear_empty_tasks_or_headers
-    note.remove_empty_header_sections
-    note.remove_unwanted_tags_dates
+    # note.remove_empty_header_sections
+    note.remove_finished_tags_dates
     note.remove_rescheduled if note.is_calendar
     note.process_repeats_and_done
     note.remove_multiple_empty_lines
     note.move_daily_ref_to_daily if note.is_calendar && options[:move_on_dailies] == 1
     note.move_daily_ref_to_notes if note.is_calendar && options[:move_daily_to_note] == 1
     note.use_template_dates # unless note.is_calendar
-    note.create_events_from_timeblocks
+    # note.create_events_from_timeblocks
     note.archive_lines if $archive == 1 # not ready yet
     # If there have been changes, write out the file
     note.rewrite_file if note.is_updated

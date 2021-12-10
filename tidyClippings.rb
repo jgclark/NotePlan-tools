@@ -1,4 +1,4 @@
-#!/usr/bin/ruby
+#!/usr/bin/env ruby
 #-------------------------------------------------------------------------------
 # Script to tidy and clean up HTML text clipped into markdown files
 # by Jonathan Clark, v1.1.1, 20.3.2021

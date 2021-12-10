@@ -54,3 +54,4 @@ build-iPhoneSimulator/
 *.code-workspace
 .DS_Store
 npSave.rb
+.history/**/*.*

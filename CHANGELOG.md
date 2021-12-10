@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## v2.1.0, 31.10.2021
+- [Change] The @repeat(..) function now creates the next copy of the repeated task without using the scheduled indicator `[>]` but the regular open task indicator `[ ]`.
+
+## v2.0.0, 31.10.2021
+- [Change] Change to using `#!/usr/bin/env ruby` at the start of scripts to make it easier to pick up whatever ruby installation is the user's preference.
+
 ## v1.9.7, 28.2.2021
 - [Improve] The place where lines moved from daily notes are inserted is now smarter still.
 - [Fix] Bugs introduced in refactoring regexes in last release.
