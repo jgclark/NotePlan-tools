@@ -1,18 +1,19 @@
 #!/usr/bin/env ruby
 #-------------------------------------------------------------------------------
 # NotePlan Tools script
-# by Jonathan Clark, v2.1.0, 10.12.2021
+# by Jonathan Clark, v2.2.0, 10.5.2022
 #-------------------------------------------------------------------------------
 # See README.md file for details, how to run and configure it.
 # Repository: https://github.com/jgclark/NotePlan-tools/
 #-------------------------------------------------------------------------------
-VERSION = "2.1.0"
+VERSION = "2.2.0"
 
 require 'date'
 require 'time'
 require 'cgi'
 require 'colorize'
 require 'optparse' # more details at https://docs.ruby-lang.org/en/2.1.0/OptionParser.html
+require 'ostruct'
 
 #-------------------------------------------------------------------------------
 # Setting variables to tweak
@@ -47,15 +48,38 @@ NP_CALENDAR_DIR = "#{np_base_dir}/Calendar".freeze
 # Regex definitions (where they're likely to be re-used). NB need to be single quoted.
 #-------------------------------------------------------------------------------
 RE_DATE = '\d{4}[\-\.//][01]?\d[\-\.//]\d{1,2}' # built-in format for finding dates of form YYYY-MM-DD and similar
-RE_DATE_TIME = RE_DATE + ' \d{2}:\d{2}(?:.(?:AM|PM))?' # YYYY-MM-DD HH:MM[AM|PM]
+RE_DATE_TIME = RE_DATE + '\s\d{2}:\d{2}(?:.(?:AM|PM))?' # YYYY-MM-DD HH:MM[AM|PM]
 RE_DATE_FORMAT_CUSTOM = '\d{1,2}[\-\.//][01]?\d[\-\.//]\d{4}'.freeze # regular expression of alternative format used to find dates in templates. This matches DD.MM.YYYY and similar.
 RE_DUE_DATE = '>' + RE_DATE # find '>2021-02-23' etc.
 RE_DUE_DATE_CAPTURE = '>(' + RE_DATE + ')' # find ' >2021-02-23' and return just date part
 RE_RESCHED_FROM_DATE = '<' + RE_DATE # find '<2021-02-23' etc.
 RE_DATE_INTERVAL = '[+\-]?\d+[bdwm]'
 RE_DATE_INTERVAL_CAPTURE = '(' + RE_DATE_INTERVAL + ')'
-RE_NOTE_LINK = '\[\[.+?\]\]' # find '[[note title]]' (not greedy)
-RE_NOTE_LINK_CAPTURE = '\[\[(.+?)\]\]' # find '[[note title]]' (not greedy)
+RE_NOTE_LINK = '\[\[[^\#\]]+(\#[^\]]+)?\]\]' # find '[[note title]]' with optional #heading (not greedy)
+RE_NOTE_LINK_CAPTURE = '\[\[([^\#\]]+(\#[^\]]+)?)\]\]' # find '[[note title]]' (not greedy)
+RE_DONE_DATE_TIME = '@done\(' + RE_DATE_TIME + '\)' # find '@done(YYYY-MM-DD HH:mm)'
+
+# Test RE_NOTE_LINK
+# puts 'invalid [[]] link' =~ /#{RE_NOTE_LINK}/
+# puts 'invalid [[#]] link' =~ /#{RE_NOTE_LINK}/
+# puts 'invalid [[#heading]] link' =~ /#{RE_NOTE_LINK}/
+# puts '[[note title#heading again]]' =~ /#{RE_NOTE_LINK}/
+# puts 'this is a [[note#heading]] link' =~ /#{RE_NOTE_LINK}/
+
+# Test RE_NOTE_LINK_CAPTURE
+# puts 'invalid [[]] link'.match(/#{RE_NOTE_LINK_CAPTURE}/)
+# puts 'invalid [[#]] link'.match(/#{RE_NOTE_LINK_CAPTURE}/)
+# puts 'invalid [[#heading]] link'.match(/#{RE_NOTE_LINK_CAPTURE}/)
+# puts '[[note title#heading again]]'.match(/#{RE_NOTE_LINK_CAPTURE}/)
+# puts 'this is a [[note#heading]] link'.match(/#{RE_NOTE_LINK_CAPTURE}/)
+
+# Test RE_DONE_DATE_TIME
+# puts '@done()' =~ /#{RE_DONE_DATE_TIME}/
+# puts '@done(2020-01-01)' =~ /#{RE_DATE_TIME}/
+# puts '@done(2020-01-01)' =~ /#{RE_DONE_DATE_TIME}/
+# puts '@done(2020-01-01 12:34)' =~ /#{RE_DATE_TIME}/
+# puts '@done(2020-01-01 12:34)' =~ /#{RE_DONE_DATE_TIME}/
+# puts 'with @done(2020-01-01 12:34) stuff' =~ /#{RE_DONE_DATE_TIME}/
 
 # Colours to use with the colorization gem
 # to show some possible combinations, run  String.color_samples
@@ -63,7 +87,7 @@ RE_NOTE_LINK_CAPTURE = '\[\[(.+?)\]\]' # find '[[note title]]' (not greedy)
 String.disable_colorization false
 CompletedColour = :light_green
 InfoColour = :yellow
-WarningColour = :light_red
+ErrorColour = :light_red
 # Test to see if we're running interactively or in a batch mode:
 # if batch mode then disable colorisation which doesn't work in logs
 tty_code = `tty`.chomp
@@ -85,7 +109,15 @@ $npfile_count = -1 # number of NPFile objects created so far (incremented before
 #-------------------------------------------------------------------------
 
 def main_message_screen(message)
-  puts message.colorize(CompletedColour)
+  puts message.colorize(CompletedColour) unless $quiet
+end
+
+def log_message_screen(message)
+  puts message if $verbose > 0 && !$quiet
+end
+
+def log_verbose_message_screen(message)
+  puts message if $verbose > 1 && !$quiet
 end
 
 def warning_message_screen(message)
@@ -96,18 +128,13 @@ def error_message_screen(message)
   puts message.colorize(ErrorColour)
 end
 
-def log_message_screen(message)
-  puts message if $verbose
-end
-
 def calc_offset_date(old_date, interval)
   # Calculate next review date, assuming:
   # - old_date is type
   # - interval is string of form nn[bdwmq]
   #   - where 'b' is weekday (i.e. Monday-Friday in English)
-  # puts "    c_o_d: old #{old_date} interval #{interval} ..."
   days_to_add = 0
-  unit = interval[-1] # i.e. get last characters
+  unit = interval[-1] # i.e. get last character
   num = interval.chop.to_i
   case unit
   when 'b' # week days
@@ -129,19 +156,19 @@ def calc_offset_date(old_date, interval)
   when 'y'
     days_to_add = num * 365 # on average
   else
-    puts "    Error in calc_offset_date from #{old_date} by #{interval}".colorize(WarningColour)
+    error_message_screen("    Error in calc_offset_date from #{old_date} by #{interval}")
   end
-  puts "    c_o_d: with #{old_date} interval #{interval} found #{days_to_add} days_to_add" if $verbose > 1
+  log_verbose_message_screen("    c_o_d: with #{old_date} interval #{interval} found #{days_to_add} days_to_add")
   return old_date + days_to_add
 end
 
 def create_new_note_file(title, ext)
   # Populate empty NPFile object for a *non-daily note*, adding just title.
   # Returns id of new note
-
   # Use x-callback scheme to add a new note in NotePlan,
   # as defined at http://noteplan.co/faq/General/X-Callback-Url%20Scheme/
   #   noteplan://x-callback-url/addNote?text=New%20Note&openNote=no
+  # FIXME: not working ... perhaps just write to the file system instead, as URI is deprecated.
   # Open a note identified by the title or date.
   # Parameters:
   # - noteTitle optional, will be prepended if it is used
@@ -152,10 +179,11 @@ def create_new_note_file(title, ext)
   # NOTE: So far this can only create notes in the top-level Notes folder
   # Does cope with emojis in titles.
 
-  uriEncoded = "noteplan://x-callback-url/addNote?noteTitle=#{URI.escape(title)}&openNote=no"
+  title_encoded = URI.escape(title)
+  uriEncoded = "noteplan://x-callback-url/addNote?noteTitle=#{title_encoded}&openNote=no"
   response = `open "#{uriEncoded}"`
   if response != ''
-    puts "  Error #{response} trying to add note with #{uriEncoded}. Exiting.".colorize(WarningColour)
+    error_message_screen("  Error #{response} trying to add note with #{uriEncoded}. Exiting.")
     exit
   end
 
@@ -166,13 +194,13 @@ def create_new_note_file(title, ext)
   new_note = NPFile.new(filename)
   new_note_id = new_note.id
   $allNotes[new_note_id] = new_note # now the following
-  puts "Added new note id #{new_note_id} with title '#{title}' and filename '#{filename}'. New $allNotes count = #{$allNotes.count}" if $verbose > 1
+  log_verbose_message_screen("Added new note id #{new_note_id} with title '#{title}' and filename '#{filename}'. New $allNotes count = #llNotes.count}")
   return new_note_id
 end
 
 def find_or_create_daily_note(yyyymmdd)
   # Read in a note that we want to update. If it doesn't exist, create it.
-  puts "    - starting find_or_create_daily_note for #{yyyymmdd}" if $verbose > 1
+  log_verbose_message_screen("    - starting find_or_create_daily_note for #{yyyymmdd}")
   filename = "#{yyyymmdd}.#{NOTE_EXT}"
   noteToAddTo = nil  # for an integer, but starting as nil
 
@@ -181,18 +209,18 @@ def find_or_create_daily_note(yyyymmdd)
     next if nn.filename != filename
 
     noteToAddTo = nn.id
-    puts "      - found match via filename (id #{noteToAddTo}) " if $verbose > 1
+    log_verbose_message_screen("      - found match via filename (id #{noteToAddTo}) ")
   end
 
   if noteToAddTo.nil?
     # now try reading in an existing daily note
     Dir.chdir(NP_CALENDAR_DIR)
-    puts "    - Looking for daily note filename #{filename}:" if $verbose > 0
+    log_message_screen("    - Looking for daily note filename #{filename}:")
     if File.exist?(filename)
       $allNotes << NPFile.new(filename)
       # now find the id of this most-recently-added NPFile instance
       noteToAddTo = $npfile_count
-      puts "      - read in match via filename (-> id #{noteToAddTo}) " if $verbose > 1
+      log_verbose_message_screen("      - read in match via filename (-> id #{noteToAddTo}) ")
     else
       # finally, we need create the note
       puts "        - warning: can't find matching note filename '#{filename}' -- so will create it".colorize(InfoColour)
@@ -200,12 +228,12 @@ def find_or_create_daily_note(yyyymmdd)
         f = File.new(filename, 'a+')
         f.close
       rescue StandardError => e
-        puts "ERROR: #{e.exception.message} when creating daily note file #{filename}".colorize(WarningColour)
+        error_message_screen("ERROR: #{e.exception.message} when creating daily note file #{filename}")
       end
       $allNotes << NPFile.new(filename)
       # now find the id of this newly-created NPFile instance
       noteToAddTo = $npfile_count
-      puts "    -> file '#{$allNotes[noteToAddTo - 1].filename}' id #{noteToAddTo}" if $verbose > 0
+      log_message_screen("    -> file '#{$allNotes[noteToAddTo - 1].filename}' id #{noteToAddTo}")
     end
   end
   return noteToAddTo
@@ -220,7 +248,7 @@ def find_or_create_note(title)
   # the future, but for now I'll try to select the most recently-changed if
   # there are matching names.
 
-  puts "    - starting find_or_create_note for '#{title}'" if $verbose > 1
+  log_verbose_message_screen("    - starting find_or_create_note for '#{title}'")
   new_note_id = nil  # for an integer, but starting as nil
 
   # First check if it exists in existing notes read in
@@ -232,7 +260,7 @@ def find_or_create_note(title)
 
     new_note_id = nn.id
     mtime = nn.modified_time
-    puts "      - found existing match via title (id #{new_note_id}) last modified #{mtime}" if $verbose > 1
+    log_verbose_message_screen("      - found existing match via title (id #{new_note_id}) last modified #{mtime}")
   end
 
   if new_note_id.nil?
@@ -243,10 +271,10 @@ def find_or_create_note(title)
     #   f = File.new(filename, 'a+') # assume it goes in top level folder
     #   f.close
     # rescue StandardError => e
-    #   puts "ERROR: #{e.exception.message} when creating note file #{filename}".colorize(WarningColour)
+    error_message_screen(  puts "ERROR: #{e.exception.message} when creating note file #{filename}")
     # end
     # now find the id of this newly-created NPFile instance
-    puts "    -> file '#{$allNotes[new_note_id].filename}' id #{new_note_id}" if $verbose > 0
+    log_message_screen("    -> file '#{$allNotes[new_note_id].filename}' id #{new_note_id}")
   end
   return new_note_id
 end
@@ -254,7 +282,7 @@ end
 def osascript(script)
   # Run applescript
   # from gist https://gist.github.com/dinge/6983008
-  puts "About to execute this AppleScript:\n#{script}\n" if $verbose > 1
+  log_verbose_message_screen("About to execute this AppleScript:\n#{script}\n")
   system 'osascript', *script.split(/\n/).map { |line| ['-e', line] }.flatten
 end
 
@@ -266,8 +294,8 @@ class NPFile
   # Define the attributes that need to be visible outside the class instances
   attr_reader :id
   attr_reader :title
-  attr_reader :cancelled_header
-  attr_reader :done_header
+  attr_reader :cancelled_heading
+  attr_reader :done_heading
   attr_reader :filename
   attr_reader :is_today
   attr_reader :is_calendar
@@ -286,8 +314,8 @@ class NPFile
     @title = ''
     @lines = []
     @line_count = 0
-    @cancelled_header = 0
-    @done_header = 0
+    @cancelled_heading = 0
+    @done_heading = 0
     @is_today = false
     @is_calendar = false
     @is_updated = false
@@ -300,8 +328,8 @@ class NPFile
     f = File.open(@filename, 'r', encoding: 'utf-8')
     f.each_line do |line|
       @lines[n] = line
-      @done_header = n  if line =~ /^## Done$/
-      @cancelled_header = n if line =~ /^## Cancelled$/
+      @done_heading = n  if line =~ /^## Done$/
+      @cancelled_heading = n if line =~ /^## Cancelled$/
       n += 1
     end
     f.close
@@ -312,16 +340,32 @@ class NPFile
       @title = @filename[0..7]
       @is_calendar = true
       @is_today = @title == $date_today
+
+    elsif @lines[0] =~ /^---/
+      # for Note file, find from frontmatter if present
+      # look for 'title:' in frontmatter
+      fn = 1
+      in_frontmatter = true
+      temp_title = ''
+      while in_frontmatter
+        in_frontmatter = false if (@lines[fn] =~ /^---/)
+        if @lines[fn] =~ /^[Tt]itle:\s+\S+/
+          @lines[fn].scan(/^[Tt]itle:\s+(.*)/) { |m| temp_title = m.join }
+        end
+        fn += 1
+      end
+      @title = !temp_title.empty? ? temp_title : 'temp_header' # but check it doesn't get to be blank
+      @is_calendar = false
+      @is_today = false
+
     else
       # otherwise use first line (but take off heading characters at the start and starting and ending whitespace)
-      tempTitle = @lines[0].gsub(/^#+\s*/, '').gsub(/\s+$/, '') # TODO: handle nil case
-      @title = !tempTitle.empty? ? tempTitle : 'temp_header' # but check it doesn't get to be blank
+      @title = @lines[0].gsub(/^#+\s*/, '').gsub(/\s+$/, '')
       @is_calendar = false
       @is_today = false
     end
 
-    modified = (@modified_time.to_s)[0..15]
-    puts "      Init NPFile #{@id}: #{@line_count} lines from #{this_file}, updated #{modified}".colorize(InfoColour) if $verbose > 1
+    log_verbose_message_screen("      Init NPFile #{@id}: #{@line_count} lines from #{this_file}, updated #{(@modified_time.to_s)[0..15]}".colorize(InfoColour))
   end
 
   # def self.new2(*args)
@@ -336,7 +380,7 @@ class NPFile
   # def append_new_line(new_line)
   #   # Append 'new_line' into position
   #   # TODO: should ideally split on '\n' and add each potential line separately
-  #   puts '  append_new_line ...' if $verbose > 1
+  #   log_verbose_message_screen('  append_new_line ...')
   #   @lines << new_line
   #   @line_count = @lines.size
   # end
@@ -350,9 +394,9 @@ class NPFile
     #   '* Write proposal at 12-14 #create_event' --> caledar event 12-2pm
     #   '### Write proposal >2020-12-20 at 2pm #create_event' --> caledar event 2pm for 1 hour on that date
     #   '- clear before meeting 2:00-2:30pm #create_event' --> caledar event 2-2:30pm
-    puts '  create_events_from_timeblocks ...' if $verbose > 1
+    log_verbose_message_screen('  create_events_from_timeblocks ...')
     n = 0
-    while n < (@done_header.positive? ? @done_header : @line_count)
+    while n < (@done_heading.positive? ? @done_heading : @line_count)
       this_line = @lines[n]
       unless this_line =~ /#{CREATE_EVENT_TAG_TO_USE}/
         n += 1
@@ -364,13 +408,13 @@ class NPFile
       event_date_s = ''
       if this_line =~ /#{RE_DUE_DATE}/
         this_line.scan(/#{RE_DUE_DATE_CAPTURE}/) { |m| event_date_s = m.join.tr('-', '') }
-        puts "    - found event creation date spec: #{event_date_s}" if $verbose > 1
+        log_verbose_message_screen("    - found event creation date spec: #{event_date_s}")
       elsif @is_calendar
         event_date_s = @filename[0..7]
-        puts "    - defaulting to create event on day: #{event_date_s}" if $verbose > 1
+        log_verbose_message_screen("    - defaulting to create event on day: #{event_date_s}")
       else
         event_date_s = $date_today
-        puts "    - defaulting to create event today: #{event_date_s}" if $verbose > 1
+        log_verbose_message_screen("    - defaulting to create event today: #{event_date_s}")
       end
       # make title: strip off #create_event, time strings, header/task/bullet punctuation, and any location info
       event_title = this_line.chomp
@@ -392,7 +436,7 @@ class NPFile
         # times of form '3:00-4:00am', '3.00-3.45PM' etc.
         time_parts_da = this_line.scan(/[^\d-](\d\d?)[:.](\d\d)-(\d\d?)[:.](\d\d)(am|pm)?[\s$]/i)
         time_parts = time_parts_da[0]
-        puts "    - time_spec type 1: #{time_parts}" if $verbose > 1
+        log_verbose_message_screen("    - time_spec type 1: #{time_parts}")
         start_hour = time_parts[4] =~ /pm/i ? time_parts[0].to_i + 12 : time_parts[0].to_i
         start_mins = time_parts[1].to_i
         end_hour = time_parts[4] =~ /pm/i ? time_parts[2].to_i + 12 : time_parts[2].to_i
@@ -401,7 +445,7 @@ class NPFile
         # times of form '3:15[am|pm]'
         time_parts_da = this_line.scan(/[^\d-](\d\d?)[:.](\d\d)(am|pm)?[\s$]/i)
         time_parts = time_parts_da[0]
-        puts "    - time_spec type 2: #{time_parts}"
+        log_message_screen("    - time_spec type 2: #{time_parts}")
         start_hour = time_parts[2] =~ /pm/i ? time_parts[0].to_i + 12 : time_parts[0].to_i
         start_mins = time_parts[1].to_i
         end_hour = (start_hour + 1).modulo(24) # cope with event crossing midnight
@@ -410,7 +454,7 @@ class NPFile
         # times of form '3am|PM'
         time_parts_da = this_line.scan(/[^\d-](\d\d?)(am|pm)[\s$]/i)
         time_parts = time_parts_da[0]
-        puts "    - time_spec type 3: #{time_parts}" if $verbose > 1
+        log_verbose_message_screen("    - time_spec type 3: #{time_parts}")
         start_hour = time_parts[1] =~ /pm/i ? time_parts[0].to_i + 12 : time_parts[0].to_i
         start_mins = 0
         end_hour = (start_hour + 1).modulo(24) # cope with event crossing midnight
@@ -419,7 +463,7 @@ class NPFile
         # times of form '3-5am|pm'
         time_parts_da = this_line.scan(/[^\d-](\d\d?)-(\d\d?)(am|pm)[\s$]/i)
         time_parts = time_parts_da[0]
-        puts "    - time_spec type 4: #{time_parts}" if $verbose > 1
+        log_verbose_message_screen("    - time_spec type 4: #{time_parts}")
         start_hour = time_parts[2] =~ /pm/i ? time_parts[0].to_i + 12 : time_parts[0].to_i
         start_mins = 0
         end_hour = time_parts[2] =~ /pm/i ? time_parts[1].to_i + 12 : time_parts[1].to_i
@@ -428,14 +472,14 @@ class NPFile
         # times of form '3-5', implied 24-hour clock
         time_parts_da = this_line.scan(/[^\d-](\d\d?)-(\d\d?)[\s$]/i)
         time_parts = time_parts_da[0]
-        puts "    - time_spec type 5: #{time_parts}" if $verbose > 1
+        log_verbose_message_screen("    - time_spec type 5: #{time_parts}")
         start_hour = time_parts[0].to_i
         start_mins = 0
         end_hour = time_parts[1].to_i
         end_mins = 0
       else
         # warn as can't find suitable time String
-        puts "  - want to create '#{event_title}' event through #create_event, but cannot find suitable time spec".colorize(WarningColour)
+        warning_message_screen("  - want to create '#{event_title}' event through #create_event, but cannot find suitable time spec")
         n += 1
         next
       end
@@ -451,7 +495,7 @@ class NPFile
       end
       start_dt_s = start_dt.strftime(DATE_TIME_APPLESCRIPT_FORMAT)
       end_dt_s   = end_dt.strftime(DATE_TIME_APPLESCRIPT_FORMAT)
-      puts "  - will create event '#{event_title}' from #{start_dt_s} to #{end_dt_s}"
+      log_message_screen("  - will create event '#{event_title}' from #{start_dt_s} to #{end_dt_s}")
 
       # use ' at X...' to set the_location (rather than that type of timeblocking)
       the_location = this_line =~ /\sat\s.*/ ? this_line.scan(/\sat\s(.*)/).join : ''
@@ -462,7 +506,7 @@ class NPFile
       # (similar to code from move_daily_ref_to_notes)
       line_indent = ''
       this_line.scan(/^(\s*)\*/) { |m| line_indent = m.join }
-      puts "    - building event description with starting indent of #{line_indent.length}" if $verbose > 1
+      log_verbose_message_screen("    - building event description with starting indent of #{line_indent.length}")
       nn = n + 1
       while nn < @line_count
         line_to_check = @lines[nn]
@@ -501,14 +545,14 @@ class NPFile
         @is_updated = true
         n += 1
       rescue StandardError => e
-        puts "ERROR: #{e.exception.message} when calling AppleScript to create an event".colorize(WarningColour)
+        error_message_screen("ERROR: #{e.exception.message} when calling AppleScript to create an event")
       end
     end
   end
 
   def clear_empty_tasks_or_headers
     # Clean up lines with just * or - or #s in them
-    puts '  remove_empty_tasks_or_headers ...' if $verbose > 1
+    log_verbose_message_screen('  remove_empty_tasks_or_headers ...')
     n = cleaned = 0
     while n < @line_count
       # blank any lines which just have a * or -
@@ -527,14 +571,15 @@ class NPFile
 
     @is_updated = true
     @line_count = @lines.size
-    puts "  - removed #{cleaned} empty lines" if $verbose > 0
+    log_message_screen("  - removed #{cleaned} empty lines")
   end
 
   def insert_new_line_at_line(new_line, line_number)
     # Insert 'new_line' into position 'line_number'
     # don't go beyond current size of @lines
+    # Doesn't write out to file, but does update @lines and @line_count.
     n = line_number >= @lines.size ? @lines.size : line_number
-    puts "    insert_new_line_at_line #{n}..." if $verbose > 1
+    log_verbose_message_screen("    - insert_new_line_at_line #{n}...")
     # break line up into separate lines (on "\n")
     line_a = new_line.split("\n")
     line_a.each do |line|
@@ -544,10 +589,10 @@ class NPFile
     @line_count = @lines.size
   end
 
-  def insert_new_line_at_start_of_section(new_line, section_heading)
+  def prepend_line_to_section(new_line, section_heading)
     # Insert 'new_line' at start of a section headed 'section_heading'
     # If this is blank, then insert after start-of-note metadata
-    puts "  insert_new_line_at_start_of_section '#{section_heading}' ..." if $verbose > 1
+    log_message_screen("  - prepend_line_to_section '#{section_heading}' ...")
     max = @lines.size
     line_number = max # as a fallback treat this as an append
     n = 0 # start iterating from the start of line of he file
@@ -571,7 +616,7 @@ class NPFile
       end
     else # we want to find the section heading
       while n <= max
-        if @lines[n] =~ /^#{section_heading}/
+        if @lines[n] =~ /^#+\s+#{section_heading}/
           line_number = n + 1 # point to line after title
           break # stop looking
         end
@@ -586,7 +631,7 @@ class NPFile
     # Append new_line after 'section_heading' line.
     # If not found, then add 'section_heading' to the end first
     # If 'section_heading' is blank, then append in first section after frontmatter, informally defined (i.e. doesn't have to start with ---)
-    puts "  append_line_to_section for '#{section_heading}' ..." if $verbose > 1
+    log_verbose_message_screen("  - append_line_to_section for '#{section_heading}' ...")
     n = 0
     max = @lines.size
     line_number = max # as a fallback treat this as an append
@@ -624,14 +669,14 @@ class NPFile
       found_section = true if line =~ /^#{section_heading}/
       n += 1
     end
-    puts "    final part with found_section #{found_section}, added #{added}" if $verbose > 1
+    log_verbose_message_screen("    final part with found_section #{found_section}, added #{added}")
     insert_new_line_at_line(new_line, n) unless added # if not added so far, then now append
     insert_new_line_at_line(section_heading, n) unless found_section # if section not yet found then add it before this line
   end
 
   def remove_finished_tags_dates
     # removes specific tags and >dates from complete or cancelled tasks
-    puts '  remove_finished_tags_dates ...' if $verbose > 1
+    log_verbose_message_screen('  remove_finished_tags_dates ...')
     n = cleaned = 0
     while n < @line_count
       # only do something if this is a completed or cancelled task
@@ -657,14 +702,14 @@ class NPFile
     return unless cleaned.positive?
 
     @is_updated = true
-    puts "  - removed #{cleaned} tags/dates" if $verbose > 0
+    log_message_screen("  - removed #{cleaned} tags/dates")
   end
 
   def remove_rescheduled
     # TODO: all this needs checking
     # remove [>] tasks from calendar notes, as there will be a duplicate
     # (whether or not the 'Append links when scheduling' option is set or not)
-    puts '  remove_rescheduled ...' if $verbose > 1
+    log_verbose_message_screen('  remove_rescheduled ...')
     n = cleaned = 0
     while n < @line_count
       # Empty any [>] todo lines
@@ -679,13 +724,13 @@ class NPFile
     return unless cleaned.positive?
 
     @is_updated = true
-    puts "  - removed #{cleaned} scheduled" if $verbose > 0
+    log_message_screen("  - removed #{cleaned} scheduled")
   end
 
   def move_daily_ref_to_daily
     # Moves items in daily notes with a >date to that corresponding date.
     # Checks whether the note exists and if not, creates one first at top level.
-    puts '  move_daily_ref_to_daily ...' if $verbose > 1
+    log_verbose_message_screen('  move_daily_ref_to_daily ...')
     # noteToAddTo = nil
     n = -1
     moved = 0
@@ -699,7 +744,7 @@ class NPFile
       # NOTE: the '+?' gets minimum number of chars, to avoid grabbing contents of several [[notes]] in the same line
       yyyy_mm_dd = ''
       line.scan(/>(\d{4}-\d{2}-\d{2})/) { |m| yyyy_mm_dd = m.join }
-      puts "  - found calendar link >#{yyyy_mm_dd} in notes on line #{n + 1} of #{@line_count}" if $verbose > 0
+      log_message_screen("  - found calendar link >#{yyyy_mm_dd} in notes on line #{n + 1} of #{@line_count}")
       yyyymmdd = "#{yyyy_mm_dd[0..3]}#{yyyy_mm_dd[5..6]}#{yyyy_mm_dd[8..9]}"
 
       # Find the existing daily note to add to, or read in, or create
@@ -712,13 +757,13 @@ class NPFile
       # also chomp off last character of line (newline)
       line = "#{line[0..label_start]}#{line[label_end..-2]}"
 
-      is_header = line =~ /^#+\s+.*/ ? true : false
+      is_heading = line =~ /^#+\s+.*/ ? true : false
 
-      if !is_header
+      if !is_heading
         # If no due date is specified in rest of the line, add date from the title of the calendar file it came from
         if line !~ /#{RE_DUE_DATE}/
           cal_date = "#{@title[0..3]}-#{@title[4..5]}-#{@title[6..7]}"
-          puts "    - '>#{cal_date}' to add from #{@title}" if $verbose > 1
+          log_verbose_message_screen("    - '>#{cal_date}' to add from #{@title}")
           lines_to_output = line + " <#{cal_date}\n"
         else
           lines_to_output = line
@@ -726,7 +771,7 @@ class NPFile
         # Work out indent level of current line
         line_indent = ''
         line.scan(/^(\s*)\*/) { |m| line_indent = m.join }
-        puts "    - starting line analysis at line #{n + 1} of #{@line_count} (indent #{line_indent.length})" if $verbose > 1
+        log_verbose_message_screen("    - starting line analysis at line #{n + 1} of #{@line_count} (indent #{line_indent.length})")
 
         # Remove this line from the calendar note
         @lines.delete_at(n)
@@ -740,7 +785,7 @@ class NPFile
           # What's the indent of this line?
           line_to_check_indent = ''
           line_to_check.scan(/^(\s*)\S/) { |m| line_to_check_indent = m.join }
-          puts "      - for '#{line_to_check.chomp}' (indent #{line_to_check_indent.length})" if $verbose > 1
+          log_verbose_message_screen("      - for '#{line_to_check.chomp}' (indent #{line_to_check_indent.length})")
           break if line_indent.length >= line_to_check_indent.length
 
           lines_to_output += line_to_check
@@ -753,22 +798,22 @@ class NPFile
         # This is a header line ...
         # We want to take any following lines up to the next blank line or same-level header.
         # So incrementally add lines until we find that break.
-        header_marker = ''
-        line.scan(/^(#+)\s/) { |m| header_marker = m.join }
+        heading_marker = ''
+        line.scan(/^(#+)\s/) { |m| heading_marker = m.join }
         lines_to_output = line + "\n"
         @lines.delete_at(n)
         @line_count -= 1
         moved += 1
-        puts "  - starting header analysis at line #{n + 1}" if $verbose > 1
+        log_verbose_message_screen("  - starting header analysis at line #{n + 1}")
 
         while n < @line_count
           line_to_check = @lines[n]
-          puts "    - l_t_o checking '#{line_to_check}'" if $verbose > 1
-          break if (line_to_check =~ /^\s*$/) || (line_to_check =~ /^#{header_marker}\s/)
+          log_verbose_message_screen("    - l_t_o checking '#{line_to_check}'")
+          break if (line_to_check =~ /^\s*$/) || (line_to_check =~ /^#{heading_marker}\s/)
 
           lines_to_output += line_to_check
           # Remove this line from the calendar note
-          puts "    - @line_count now #{@line_count}" if $verbose > 1
+          log_verbose_message_screen("    - @line_count now #{@line_count}")
           @lines.delete_at(n)
           @line_count -= 1
           moved += 1
@@ -784,77 +829,97 @@ class NPFile
     return unless moved.positive?
 
     @is_updated = true
-    puts "  - moved #{moved} lines to daily notes" if $verbose > 0
+    log_message_screen("  - moved #{moved} lines to daily notes")
   end
 
-  def move_daily_ref_to_notes
-    # Move items in daily note with a [[note link]] to that note (inserting after header).
+  def move_daily_ref_to_notes(move_only_on_complete)
+    # Move items in daily note with a [[note]] link to that note, inserting after Title,
+    # or after the Heading if supplied in [[note#heading]].
+    # If move_only_on_complete is true, then only works if its a newly completed task.
     # Checks whether the note exists and if not, creates one first at top level.
-
     # TODO: should also check whether link is actually a date, and then do nothing.
-    
-    puts '  move_daily_ref_to_notes ...' if $verbose > 1
+    # NB: only does something with first [[note]] in a line
+    log_verbose_message_screen('  move_daily_ref_to_notes ...')
+    note_link = nil
     note_name = nil
+    note_heading = ''
     n = 0
     moved = 0
     while n < @line_count
       line = @lines[n]
-      # find lines with [[note title]] mentions
+      # find lines with [[note]] link mentions
       if line !~ /#{RE_NOTE_LINK}/
         # this line doesn't match, so break out of loop and go to look at next line
         n += 1
         next
       end
 
-      is_header = line =~ /^#+\s+.*/ ? true : false
+      # if move_only_on_complete is set, then only proceed if this is a newly-
+      # completed task
+      if move_only_on_complete && line !~ /#{RE_DONE_DATE_TIME}/
+        # this line doesn't match, so break out of loop and go to look at next line
+        log_message_screen("  - found note link in line '#{line.chomp}' but without a @done(date); skipping.")
+        n += 1
+        next
+      end
 
-      # the following regex matches returns an array with one item, so make a string (by join)
-      # NOTE: this '+?' gets minimum number of chars, to avoid grabbing contents of several [[notes]] in the same line
+      is_heading = line =~ /^#+\s+.*/ ? true : false
+
+      # Get the first [[note]] link in a line with optional heading
       if line =~ /#{RE_NOTE_LINK}/
-        line.scan(/#{RE_NOTE_LINK_CAPTURE}/) { |m| note_name = m.join }
-        puts "  - found note link [[#{note_name}]] in header on line #{n + 1} of #{@line_count}" if is_header && ($verbose > 0)
-        puts "  - found note link [[#{note_name}]] in notes on line #{n + 1} of #{@line_count}" if !is_header && ($verbose > 0)
+        # the following regex matches returns an array with one item, so make a string (by join)
+        line.scan(/#{RE_NOTE_LINK_CAPTURE}/) { |m| note_link = m.join }
+        puts "  - found note link [[#{note_link}]] in a heading on line #{n + 1} of #{@line_count}" if is_heading && ($verbose > 0)
+        puts "  - found note link [[#{note_link}]] in notes on line #{n + 1} of #{@line_count}" if !is_heading && ($verbose > 0)
+        m = note_link.split('#')
+        if m.length > 1
+          note_name = m[0]
+          note_heading = m[1]
+          puts "    - and this has heading '#{note_heading}'"
+        else
+          note_name = note_link
+        end
       end
 
       noteToAddTo = find_or_create_note(note_name)
       lines_to_output = ''
 
-      # Remove the [[name]] text by finding string points
+      # Remove the [[name]] text by finding first example of the string points
       label_start = line.index('[[') - 2 # remove space before it as well
       label_end = line.index(']]') + 2
       # also chomp off last character of line (newline)
       line = "#{line[0..label_start]}#{line[label_end..-2]}"
 
-      if is_header
-        # This is a header line.
-        # We want to take any following lines up to the next blank line or same-level header.
+      if is_heading
+        # This is a heading line.
+        # We want to take any following lines up to the next blank line or same-level heading.
         # So incrementally add lines until we find that break.
-        header_marker = ''
-        line.scan(/^(#+)\s/) { |m| header_marker = m.join }
+        heading_marker = ''
+        line.scan(/^(#+)\s/) { |m| heading_marker = m.join }
         lines_to_output = "#{line}\n"
         @lines.delete_at(n)
         @line_count -= 1
         moved += 1
-        puts "  - starting header analysis at line #{n + 1}" if $verbose > 1
+        log_verbose_message_screen("  - starting heading analysis at line #{n + 1}")
 
         while n < @line_count
           line_to_check = @lines[n]
-          puts "    - l_t_o checking '#{line_to_check}'" if $verbose > 1
-          break if (line_to_check =~ /^\s*$/) || (line_to_check =~ /^#{header_marker}\s/)
+          log_verbose_message_screen("    - l_t_o checking '#{line_to_check}'")
+          break if (line_to_check =~ /^\s*$/) || (line_to_check =~ /^#{heading_marker}\s/)
 
           lines_to_output += line_to_check
           # Remove this line from the calendar note
-          puts "    - @line_count now #{@line_count}" if $verbose > 1
+          log_verbose_message_screen("    - @line_count now #{@line_count}")
           @lines.delete_at(n)
           @line_count -= 1
           moved += 1
         end
       else
-        # This is not a header line.
+        # This is not a heading line.
         # If no due date is specified in rest of the line, add date from the title of the calendar file it came from
         if line !~ /#{RE_DUE_DATE}/
           cal_date = "#{@title[0..3]}-#{@title[4..5]}-#{@title[6..7]}"
-          puts "    - '#{cal_date}' to add from #{@title}" if $verbose > 1
+          log_verbose_message_screen("    - '#{cal_date}' to add from #{@title}")
           lines_to_output = line + " >#{cal_date}\n"
         else
           lines_to_output = line
@@ -862,7 +927,7 @@ class NPFile
         # Work out indent level of current line
         line_indent = ''
         line.scan(/^(\s*)\*/) { |m| line_indent = m.join }
-        puts "  - starting line analysis at line #{n + 1} of #{@line_count} with indent '#{line_indent}' (#{line_indent.length})" if $verbose > 1
+        log_verbose_message_screen("  - starting line analysis at line #{n + 1} of #{@line_count} with indent '#{line_indent}' (#ine_indent.length})")
         # Remove this line from the calendar note
         @lines.delete_at(n)
         @line_count -= 1
@@ -875,7 +940,7 @@ class NPFile
           # What's the indent of this line?
           line_to_check_indent = ''
           line_to_check.scan(/^(\s*)\S/) { |m| line_to_check_indent = m.join }
-          puts "    - for '#{line_to_check.chomp}' indent='#{line_to_check_indent}' (#{line_to_check_indent.length})" if $verbose > 1
+          log_verbose_message_screen("    - for '#{line_to_check.chomp}' indent='#{line_to_check_indent}' (#{line_to_check_indent.length})")
           break if line_indent.length >= line_to_check_indent.length
 
           lines_to_output += line_to_check
@@ -886,8 +951,10 @@ class NPFile
         end
       end
 
-      # insert updated line(s) after header lines in the note file
-      $allNotes[noteToAddTo].append_line_to_section(lines_to_output, '')
+      # insert updated line(s) to the right section of the project note file
+      # (or after header lines if no heading specified)
+      # $allNotes[noteToAddTo].append_line_to_section(lines_to_output, note_heading)
+      $allNotes[noteToAddTo].prepend_line_to_section(lines_to_output, note_heading)
 
       # write the note file out
       $allNotes[noteToAddTo].rewrite_file
@@ -895,13 +962,13 @@ class NPFile
     return unless moved.positive?
 
     @is_updated = true
-    puts "  - moved #{moved} lines to notes" if $verbose > 0
+    log_message_screen("  - moved #{moved} lines to notes")
   end
 
   def archive_lines
     # Shuffle @done and cancelled lines to relevant sections at end of the file
     # TODO: doesn't yet deal with notes with subheads in them
-    puts '  archive_lines ...' if $verbose > 1
+    log_verbose_message_screen('  archive_lines ...')
     doneToMove = [] # NB: zero-based
     doneToMoveLength = [] # NB: zero-based
     cancToMove = [] # NB: zero-based
@@ -911,7 +978,7 @@ class NPFile
     # Go through all lines between metadata and ## Done section
     # start, noting completed tasks
     n = 1
-    searchLineLimit = @done_header.positive? ? @done_header : @line_count
+    searchLineLimit = @done_heading.positive? ? @done_heading : @line_count
     while n < searchLineLimit
       n += 1
       line = @lines[n]
@@ -930,24 +997,24 @@ class NPFile
       # save this length
       doneToMoveLength.push(linesToMove)
     end
-    puts "    doneToMove:  #{doneToMove} / #{doneToMoveLength}" if $verbose > 1
+    log_verbose_message_screen("    doneToMove:  #{doneToMove} / #{doneToMoveLength}")
 
     # Do some done line shuffling, is there's anything to do
     unless doneToMove.empty?
       # If we haven't already got a Done section, make one
-      if @done_header.zero?
+      if @done_heading.zero?
         @lines.push('')
         @lines.push('## Done')
         @line_count += 2
-        @done_header = @line_count
+        @done_heading = @line_count
       end
 
       # Copy the relevant lines
-      doneInsertionLine = @cancelled_header != 0 ? @cancelled_header : @line_count
+      doneInsertionLine = @cancelled_heading != 0 ? @cancelled_heading : @line_count
       c = 0
       doneToMove.each do |nn|
         linesToMove = doneToMoveLength[c]
-        puts "      Copying lines #{nn}-#{nn + linesToMove} to insert at #{doneInsertionLine}" if $verbose > 1
+        log_verbose_message_screen("      Copying lines #{nn}-#{nn + linesToMove} to insert at #{doneInsertionLine}")
         (nn..(nn + linesToMove)).each do |i|
           @lines.insert(doneInsertionLine, @lines[i])
           @line_count += 1
@@ -960,12 +1027,12 @@ class NPFile
       c = doneToMoveLength.size - 1
       doneToMove.reverse.each do |nn|
         linesToMove = doneToMoveLength[c]
-        puts "      Deleting lines #{nn}-#{nn + linesToMove}" if $verbose > 1
+        log_verbose_message_screen("      Deleting lines #{nn}-#{nn + linesToMove}")
         (nn + linesToMove).downto(n) do |i|
           @lines.delete_at(i)
           @line_count -= 1
           doneInsertionLine -= 1
-          @done_header -= 1
+          @done_heading -= 1
         end
         c -= 1
       end
@@ -974,7 +1041,7 @@ class NPFile
     # Go through all lines between metadata and ## Done section
     # start, noting cancelled line numbers
     n = 0
-    searchLineLimit = @done_header.positive? ? @done_header : @line_count
+    searchLineLimit = @done_heading.positive? ? @done_heading : @line_count
     while n < searchLineLimit
       n += 1
       line = @lines[n]
@@ -993,7 +1060,7 @@ class NPFile
       # save this length
       cancToMoveLength.push(linesToMove)
     end
-    puts "    cancToMove: #{cancToMove} / #{cancToMoveLength}" if $verbose > 1
+    log_verbose_message_screen("    cancToMove: #{cancToMove} / #{cancToMoveLength}")
 
     # Do some cancelled line shuffling, is there's anything to do
     return if cancToMove.empty?
@@ -1011,7 +1078,7 @@ class NPFile
     c = 0
     cancToMove.each do |nn|
       linesToMove = cancToMoveLength[c]
-      puts "      Copying lines #{nn}-#{nn + linesToMove} to insert at #{cancelledInsertionLine}" if $verbose > 1
+      log_verbose_message_screen("      Copying lines #{nn}-#{nn + linesToMove} to insert at #{cancelledInsertionLine}")
       (nn..(nn + linesToMove)).each do |i|
         @lines.insert(cancelledInsertionLine, @lines[i])
         @line_count += 1
@@ -1024,12 +1091,12 @@ class NPFile
     c = doneToMoveLength.size - 1
     cancToMove.reverse.each do |nn|
       linesToMove = doneToMoveLength[c]
-      puts "      Deleting lines #{nn}-#{nn + linesToMove}" if $verbose > 1
+      log_verbose_message_screen("      Deleting lines #{nn}-#{nn + linesToMove}")
       (nn + linesToMove).downto(n) do |i|
-        puts "        Deleting line #{i} ..." if $verbose > 1
+        log_verbose_message_screen("        Deleting line #{i} ...")
         @lines.delete_at(i)
         @line_count -= 1
-        @done_header -= 1
+        @done_heading -= 1
       end
     end
 
@@ -1040,14 +1107,14 @@ class NPFile
   def use_template_dates
     # Take template dates and turn into real dates
 
-    puts '  use_template_dates ...' if $verbose > 1
+    log_verbose_message_screen('  use_template_dates ...')
     date_string = ''
     current_target_date = ''
     calc_date = ''
     last_was_template = false
     n = 0
     # Go through each line in the active part of the file
-    while n < (@done_header.positive? ? @done_header : @line_count)
+    while n < (@done_heading.positive? ? @done_heading : @line_count)
       line = @lines[n]
       date_string = ''
       # look for base date, of form YYYY-MM-DD and variations and whatever RE_DATE_FORMAT_CUSTOM gives
@@ -1063,7 +1130,7 @@ class NPFile
       if date_string != ''
         # We have a date string to use for any offsets in the following section
         current_target_date = date_string
-        puts "    - Found CTD #{current_target_date}" if $verbose > 1
+        log_verbose_message_screen("    - Found CTD #{current_target_date}")
       else
         # Try matching for the custom date pattern, configured at the top
         # (though check it's not got various characters before it, to defeat common usage in middle of things like URLs)
@@ -1071,13 +1138,13 @@ class NPFile
         if date_string != ''
           # We have a date string to use for any offsets in the following section
           current_target_date = date_string
-          puts "    - Found CTD #{current_target_date}" if $verbose > 1
+          log_verbose_message_screen("    - Found CTD #{current_target_date}")
         end
       end
       if line =~ /#template/
         # We have a #template tag so ignore any offsets in the following section
         last_was_template = true
-        puts "    . Found #template in '#{line.chomp}'" if $verbose > 1
+        log_verbose_message_screen("    . Found #template in '#{line.chomp}'")
       end
 
       # ignore line if we're in a template section (last_was_template is true)
@@ -1086,15 +1153,16 @@ class NPFile
         # NB: this only deals with the first on any line; it doesn't make sense to have more than one.
         date_offset_string = ''
         if line =~ /\{#{RE_DATE_INTERVAL}\}/
-          puts "    - Found line '#{line.chomp}'" if $verbose > 1
+          log_verbose_message_screen("    - Found line '#{line.chomp}'")
           line.scan(/\{(#{RE_DATE_INTERVAL_CAPTURE})\}/) { |m| date_offset_string = m.join }
+          # FIXME: line above seems to be returning '-18d-18d' for example. Though the code still works OK as calc_offset_date happens to parse it OK
           if date_offset_string != ''
-            puts "      - Found DOS #{date_offset_string}' and last_was_template=#{last_was_template}" if $verbose > 1
+            log_verbose_message_screen("      - Found DOS #{date_offset_string} and last_was_template=#{last_was_template}")
             if current_target_date != ''
               begin
                 calc_date = calc_offset_date(Date.parse(current_target_date), date_offset_string)
               rescue StandardError => e
-                puts "      Error #{e.exception.message} while parsing date '#{current_target_date}' for #{date_offset_string}".colorize(WarningColour)
+                error_message_screen("      Error #{e.exception.message} while parsing date '#{current_target_date}' for #{date_offset_string}")
               end
               # Remove the offset text (e.g. {-3d}) by finding string points
               label_start = line.index('{')
@@ -1104,10 +1172,10 @@ class NPFile
               # then add the new date
               # line += ">#{calc_date}"
               @lines[n] = line
-              puts "      - In line labels runs #{label_start}-#{label_end} --> '#{line.chomp}'" if $verbose > 1
+              log_verbose_message_screen("      - In line labels runs #{label_start}-#{label_end} --> '#{line.chomp}'")
               @is_updated = true
             elsif $verbose > 0
-              puts "    Warning: have an offset date, but no current_target_date before line '#{line.chomp}'".colorize(WarningColour)
+              error_message_screen("    Warning: have an offset date, but no current_target_date before line '#{line.chomp}'")
             end
           end
         end
@@ -1130,16 +1198,16 @@ class NPFile
     # shortened to @done(YYYY-MM-DD).
     # It includes cancelled tasks as well; to remove a repeat entirely, remoce
     # the @repeat tag from the task in NotePlan.
-    puts '  process_repeats_and_done ...' if $verbose > 1
+    log_verbose_message_screen('  process_repeats_and_done ...')
     n = cleaned = 0
     # Go through each line in the active part of the file
-    while n < (@done_header != 0 ? @done_header : @line_count)
+    while n < (@done_heading != 0 ? @done_heading : @line_count)
       line = @lines[n]
       updated_line = ''
       completed_date = ''
       # find lines with date-time to shorten, and capture date part of it
       # i.e. @done(YYYY-MM-DD HH:MM[AM|PM])
-      if line =~ /@done\(#{RE_DATE_TIME}\)/
+      if line =~ /#{RE_DONE_DATE_TIME}/
         # get completed date
         line.scan(/\((\d{4}-\d{2}-\d{2}) \d{2}:\d{2}(?:.(?:AM|PM))?\)/) { |m| completed_date = m.join }
         updated_line = line.gsub(/\(#{RE_DATE_TIME}\)/, "(#{completed_date})")
@@ -1155,7 +1223,7 @@ class NPFile
             # New repeat date = completed date + interval
             date_interval_string = date_interval_string[1..date_interval_string.length]
             new_repeat_date = calc_offset_date(Date.parse(completed_date), date_interval_string)
-            puts "      Adding from completed date --> #{new_repeat_date}" if $verbose > 1
+            log_verbose_message_screen("      Adding from completed date --> #{new_repeat_date}")
           else
             # New repeat date = due date + interval
             # look for the due date (>YYYY-MM-DD)
@@ -1169,7 +1237,7 @@ class NPFile
               due_date = completed_date
             end
             new_repeat_date = calc_offset_date(Date.parse(due_date), date_interval_string)
-            puts "      Adding from due date --> #{new_repeat_date}" if $verbose > 1
+            log_verbose_message_screen("      Adding from due date --> #{new_repeat_date}")
           end
 
           # Create new repeat line:
@@ -1193,11 +1261,11 @@ class NPFile
     end
   end
 
-  def remove_empty_header_sections
+  def remove_empty_heading_sections
     # go backwards through the active part of the note, deleting any sections without content
-    puts '  remove_empty_header_sections ...' if $verbose > 1
+    log_verbose_message_screen('  remove_empty_heading_sections ...')
     cleaned = 0
-    n = @done_header != 0 ? @done_header - 1 : @line_count - 1
+    n = @done_heading != 0 ? @done_heading - 1 : @line_count - 1
 
     # Go through each line in the file
     later_header_level = this_header_level = 0
@@ -1207,11 +1275,11 @@ class NPFile
       if line =~ /^#+\s\w/
         # this is a markdown header line; work out what level it is
         line.scan(/^(#+)\s/) { |m| this_header_level = m[0].length }
-        # puts "    - #{later_header_level} / #{this_header_level}" if $verbose > 1
-        # if later header is same or higher level (fewer #s) as this,
+        log_verbose_message_screen(puts "    - #{later_header_level} / #{this_header_level}")
+        # if later heading is same or higher level (fewer #s) as this,
         # then we can delete this line
         if later_header_level == this_header_level || at_eof == 1
-          puts "    - Removing empty header line #{n} '#{line.chomp}'" if $verbose > 1
+          log_verbose_message_screen("    - Removing empty heading line #{n} '#{line.chomp}'")
           @lines.delete_at(n)
           cleaned += 1
           @line_count -= 1
@@ -1229,14 +1297,14 @@ class NPFile
 
     @is_updated = true
     # @line_count = @lines.size
-    puts "  - removed #{cleaned} lines of empty section(s)" if $verbose > 1
+    log_verbose_message_screen("  - removed #{cleaned} lines of empty section(s)")
   end
 
   def remove_multiple_empty_lines
     # go backwards through the active parts of the note, deleting any blanks at the end
-    puts '  remove_multiple_empty_lines ...' if $verbose > 1
+    log_verbose_message_screen('  remove_multiple_empty_lines ...')
     cleaned = 0
-    n = (@done_header != 0 ? @done_header - 1 : @line_count - 1)
+    n = (@done_heading != 0 ? @done_heading - 1 : @line_count - 1)
     last_was_empty = false
     while n.positive?
       line_to_test = @lines[n]
@@ -1251,12 +1319,12 @@ class NPFile
 
     @is_updated = true
     @line_count = @lines.size
-    puts "  - removed #{cleaned} empty lines" if $verbose > 1
+    log_verbose_message_screen("  - removed #{cleaned} empty lines")
   end
 
   def rewrite_file
     # write out this update file
-    puts '  > writing updated version of ' + @filename.to_s.bold unless $quiet
+    main_message_screen("  > writing updated version of " + @filename)
     # open file and write all the lines out
     filepath = if @is_calendar
                  "#{NP_CALENDAR_DIR}/#{@filename}"
@@ -1270,7 +1338,7 @@ class NPFile
         end
       end
     rescue StandardError => e
-      puts "ERROR: #{e.exception.message} when re-writing note file #{filepath}".colorize(WarningColour)
+      error_message_screen("ERROR: #{e.exception.message} when re-writing note file #{filepath}")
     end
   end
 end
@@ -1280,58 +1348,64 @@ end
 #=======================================================================================
 
 # Setup program options
-options = {}
+options = OpenStruct.new
+options.archive = false # default off at the moment as feature isn't complete
+options.move_daily_to_note = false # default off now we have the next option
+options.move_daily_to_note_when_complete = false
+options.move_on_dailies = false
+options.remove_rescheduled = true
+options.skipfile = ''
+options.skiptoday = false
+options.quiet = false
+options.verbose = 0
 opt_parser = OptionParser.new do |opts|
   opts.banner = "NotePlan tools v#{VERSION}\nDetails at https://github.com/jgclark/NotePlan-tools/\nUsage: npTools.rb [options] [file-pattern]"
   opts.separator ''
-  options[:archive] = 0 # default off at the moment as feature isn't complete
-  options[:move_daily_to_note] = 1
-  options[:move_on_dailies] = 0
-  options[:remove_rescheduled] = 1
-  options[:skipfile] = ''
-  options[:skiptoday] = false
-  options[:quiet] = false
-  options[:verbose] = 0
-  opts.on('-a', '--noarchive', "Don't archive completed tasks into the ## Done section. Turned on by default at the moment.") do
-    options[:archive] = 0
-  end
+  # Remove option from use until ready
+  # opts.on('-a', '--archive', "Archive completed tasks into the ## Done section.") do
+  #   options.archive = true
+  # end
   opts.on('-c', '--changes HOURS', Integer, "How many hours to look back to find note changes to process") do |n|
     hours_to_process = n
   end
+  opts.on('-d', '--moveondailies', "Move Daily items with >date to that Daily note") do
+    options.move_on_dailies = true
+  end
   opts.on('-f', '--skipfile=TITLE[,TITLE2,etc]', Array, "Don't process specific file(s)") do |skipfile|
-    options[:skipfile] = skipfile
+    options.skipfile = skipfile
   end
   opts.on('-h', '--help', 'Show this help summary') do
     puts opts
     exit
   end
   opts.on('-i', '--skiptoday', "Don't touch today's daily note file") do
-    options[:skiptoday] = true
+    options.skiptoday = true
   end
-  opts.on('-m', '--moveon', "Move Daily items with >date to that Daily note") do
-    options[:move_on_dailies] = 1
+  opts.on('-m', '--move', "Move Daily items with [[Note#Heading]] reference to that Note",
+          "This is triggered whether or not the task is complete.") do
+    options.move_daily_to_note = true
   end
-  opts.on('-n', '--nomove', "Don't move Daily items with [[Note]] reference to that Note") do
-    options[:move_daily_to_note] = 0
+  opts.on('-t', '--movecomplete', "Move Daily items with [[Note#Heading]] reference to that Note on completion") do
+    options.move_daily_to_note_when_complete = true
   end
   opts.on('-q', '--quiet', 'Suppress all output, apart from error messages. Overrides -v or -w.') do
-    options[:quiet] = true
+    options.quiet = true
   end
   opts.on('-s', '--keepscheduled', 'Keep the re-scheduled (>) dates of completed tasks') do
-    options[:remove_rescheduled] = 0
+    options.remove_rescheduled = false
   end
   opts.on('-v', '--verbose', 'Show information as I work') do
-    options[:verbose] = 1
+    options.verbose = 1
   end
   opts.on('-w', '--moreverbose', 'Show more information as I work') do
-    options[:verbose] = 2
+    options.verbose = 2
   end
 end
-opt_parser.parse! # parse out options, leaving file patterns to process
-$quiet = options[:quiet]
-$verbose = $quiet ? 0 : options[:verbose] # if quiet, then verbose has to  be 0
-$archive = options[:archive]
-$remove_rescheduled = options[:remove_rescheduled]
+opt_parser.parse!(ARGV) # parse out options, leaving file patterns to process
+$quiet = options.quiet
+$verbose = $quiet ? 0 : options.verbose # if quiet, then verbose has to  be 0
+$archive = options.archive
+$remove_rescheduled = options.remove_rescheduled
 
 #------------------------------
 # Test for append_line_to_section
@@ -1359,21 +1433,21 @@ begin
     $allNotes << NPFile.new(this_file)
   end
 rescue StandardError => e
-  puts "ERROR: #{e.exception.message} when reading in all notes files".colorize(WarningColour)
+  error_message_screen("ERROR: #{e.exception.message} when reading in all notes files")
 end
-puts "Read in all Note files: #{$npfile_count} found\n" if $verbose > 0
+log_verbose_message_screen("Read in all Note files: #{$npfile_count} found\n")
 
 if ARGV.count.positive?
   # We have a file pattern given, so find that (starting in the notes directory), and use it
-  puts "Starting npTools at #{time_now_fmttd} for files matching pattern(s) #{ARGV}." unless $quiet
+  main_message_screen("Starting npTools at #{time_now_fmttd} for files matching pattern(s) #{ARGV}.")
   begin
     ARGV.each do |pattern|
       # if pattern has a '.' in it assume it is a full filename ...
       # ... otherwise treat as close to a regex term as possible with Dir.glob
       glob_pattern = pattern =~ /\./ ? pattern : '[!@]**/*' + pattern + '*.{md,txt}'
-      puts "  Looking for note filenames matching glob_pattern #{glob_pattern}:" if $verbose > 0
+      log_message_screen("  Looking for note filenames matching glob_pattern #{glob_pattern}:")
       Dir.glob(glob_pattern).each do |this_file|
-        puts "  - #{this_file}" if $verbose > 0
+        log_message_screen("  - #{this_file}")
         next if File.zero?(this_file) # ignore if this file is empty
 
         # Note has already been read in; so now just find which one to point to, by matching filename
@@ -1381,7 +1455,7 @@ if ARGV.count.positive?
           # copy the $allNotes item into $notes array
           if this_file == this_note.filename
             $notes << this_note
-            puts "    -> found at $allNotes ID #{this_note.id}" if $verbose > 1
+            log_verbose_message_screen("    -> found at $allNotes ID #{this_note.id}")
           end
         end
       end
@@ -1393,9 +1467,9 @@ if ARGV.count.positive?
       # if pattern has a '.' in it assume it is a full filename ...
       # ... otherwise treat as close to a regex term as possible with Dir.glob
       glob_pattern = pattern =~ /\./ ? pattern : '*' + pattern + '*.{md,txt}'
-      puts "  Looking for daily note filenames matching glob_pattern #{glob_pattern}:" if $verbose > 0
+      log_message_screen("  Looking for daily note filenames matching glob_pattern #{glob_pattern}:")
       Dir.glob(glob_pattern).each do |this_file|
-        puts "  - #{this_file}" if $verbose > 0
+        log_message_screen("  - #{this_file}")
         # read in file unless this file is empty
         next if File.zero?(this_file)
 
@@ -1406,71 +1480,73 @@ if ARGV.count.positive?
       end
     end
   rescue StandardError => e
-    puts "ERROR: #{e.exception.message} when reading in files matching pattern #{pattern}".colorize(WarningColour)
+    error_message_screen("ERROR: #{e.exception.message} when reading in files matching pattern #{pattern}")
   end
 
 else
   # Read metadata for all Note files, and find those altered in the last 24 hours
-  puts "Starting npTools at #{time_now_fmttd} for all NP files altered in last #{hours_to_process} hours." unless $quiet
+  main_message_screen("Starting npTools at #{time_now_fmttd} for all NP files altered in last #{hours_to_process} hours.")
   begin
     $allNotes.each do |this_note|
       next unless this_note.modified_time > (time_now - hours_to_process * 60 * 60)
 
       # copy this relevant $allNotes item into $notes array to process
+      log_verbose_message_screen("    Found relevant project file '#{this_note.filename}'")
       $notes << this_note
     end
   rescue StandardError => e
-    puts "ERROR: #{e.exception.message} when finding recently changed files".colorize(WarningColour)
+    error_message_screen("ERROR: #{e.exception.message} when finding recently changed files")
   end
 
   # Also read metadata for all Daily files, and find those altered in the last 24 hours
   begin
     Dir.chdir(NP_CALENDAR_DIR)
     Dir.glob(['{[!@]**/*,*}.{txt,md}']).each do |this_file|
-      puts "    Checking daily file #{this_file}, updated #{File.mtime(this_file)}, size #{File.size(this_file)}" if $verbose > 1
+      # log_verbose_message_screen("    Checking daily file #{this_file}, updated #{File.mtime(this_file)}, size #{File.size(this_file)}")
       next if File.zero?(this_file) # ignore if this file is empty
       # if modified time (mtime) in the last 24 hours
       next unless File.mtime(this_file) > (time_now - hours_to_process * 60 * 60)
-
+      
+      log_verbose_message_screen("    Found relevant daily file #{this_file}, updated #{File.mtime(this_file)}, size #{File.size(this_file)}")
       this_note = NPFile.new(this_file)
       $allNotes << this_note
       # copy the $allNotes item into $notes array
       $notes << this_note
     end
   rescue StandardError => e
-    puts "ERROR: #{e.exception.message} when finding recently changed files".colorize(WarningColour)
+    error_message_screen("ERROR: #{e.exception.message} when finding recently changed files")
   end
 end
 
 #--------------------------------------------------------------------------------------
 if $notes.count.positive? # if we have some files to work on ...
-  puts "\nProcessing #{$notes.count} files:" if $verbose > 0
+  log_message_screen("\nProcessing #{$notes.count} files:")
   # For each NP file to process, do the following:
   $notes.sort! { |a, b| a.title <=> b.title }
   $notes.each do |note|
-    if note.is_today && options[:skiptoday]
-      puts '(Skipping ' + note.title.to_s.bold + ' due to --skiptoday option)' if $verbose > 0
+    if note.is_today && options.skiptoday
+      log_message_screen("  (Skipping #{note.title.to_s.bold} due to --skiptoday option)")
       next
     end
-    if options[:skipfile].include? note.title
-      puts '(Skipping ' + note.title.to_s.bold + ' due to --skipfile option)' if $verbose > 0
+    if options.skipfile.include? note.title
+      log_message_screen("  (Skipping#{ note.title.to_s.bol}' due to --skipfile option)")
       next
     end
-    puts " Processing file id #{note.id}: " + note.title.to_s.bold if $verbose > 0
+    log_message_screen("  Processing file id #{note.id}: " + note.title.to_s.bold)
     note.clear_empty_tasks_or_headers
-    # note.remove_empty_header_sections
+    # note.remove_empty_heading_sections
+    note.move_daily_ref_to_notes(options.move_daily_to_note_when_complete) if note.is_calendar && (options.move_daily_to_note || options.move_daily_to_note_when_complete)
     note.remove_finished_tags_dates
     note.remove_rescheduled if note.is_calendar
     note.process_repeats_and_done
     note.remove_multiple_empty_lines
-    note.move_daily_ref_to_daily if note.is_calendar && options[:move_on_dailies] == 1
-    note.move_daily_ref_to_notes if note.is_calendar && options[:move_daily_to_note] == 1
+    note.move_daily_ref_to_daily if note.is_calendar && options.move_on_dailies
     note.use_template_dates # unless note.is_calendar
     # note.create_events_from_timeblocks
-    note.archive_lines if $archive == 1 # not ready yet
+    note.archive_lines if $archive
     # If there have been changes, write out the file
     note.rewrite_file if note.is_updated
   end
 else
-  puts "  Warning: No matching files found.\n".colorize(WarningColour)
+  error_message_screen("  Warning: No matching files found.\n")
 end

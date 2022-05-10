@@ -1,4 +1,10 @@
 # CHANGELOG
+As always, `npTools -h` to see the full list of current options.
+## v2.2.0, 2022-05-10
+- [Add] Adds the `--movecomplete` option to move a task from a calendar note to the project note indicated by [[note#title]] but only when the task has been completed. (The earlier '--move' option remains; this does the same, but operates whether or not the task has been completed.)
+- [Add] Understands notes with titles in the frontmatter (added NP v3.4.x)
+- [Change] Removed `--archive` option, as it isn't ready for use. (It was already turned off by default.)
+- [Change] Tidy up logging
 
 ## v2.1.0, 31.10.2021
 - [Change] The @repeat(..) function now creates the next copy of the repeated task without using the scheduled indicator `[>]` but the regular open task indicator `[ ]`.

@@ -1,6 +1,6 @@
 # NotePlan Tools
 
-**Note: This is now a legacy project. Almost all of the capability of this script is now available through the Plugins I've written, and are available through NotePlan v3.  Please see [this overview](https://help.noteplan.co/article/65-commandbar-plugins), and the individual [plugins' details in the GitHub repository](https://github.com/NotePlan/plugins).**
+**Note: Much of the capability of this script is now available through the Plugins I've written that are available through NotePlan v3.  Please see [this overview](https://help.noteplan.co/article/65-commandbar-plugins), and the individual [plugins' details in the GitHub repository](https://github.com/NotePlan/plugins).**
 
 `npTools.rb` is a Ruby script that adds functionality to the [NotePlan app](https://noteplan.co/). Particularly when run frequently, this provides a more flexible system for repeating tasks, allows for due dates to be expressed as offsets and therefore templates, moves items from Daily files to Note files, and creates events. It incorporates an earlier script to 'clean' or tidy up NotePlan's data files.
 
@@ -27,8 +27,8 @@ In more detail:
 
 NB: This only operates from Daily (Calendar) notes; it therefore doesn't interfere with **linking and back-linking** between main notes.
 
-### Files Daily (Calendar) note items
-The script moves any Daily note entries with **a `[[Note title]]`** in it to the mentioned note, **filing** them directly after the header section. 
+### Files Daily (Calendar) note tasks
+The script can move any Daily note tasks with **a `[[Note title]]`** in it to the mentioned note, **filing** them directly after the header section.
 
 In more detail:
 - where the line is a heading, it moves the heading and all following lines until a blank line, or the next heading of the same level
@@ -36,9 +36,11 @@ In more detail:
 - where the note for a  `[[Note link]]` doesn't exist, it is created in the top-level Notes folder first
 - if there is a `>YYYY-MM-DD` date specified in the line already, then carry that over, otherwise  add today's date
 
-This feature can be turned off using the `-n` option.  
+This feature can be turned on using two different options, with slightly different triggers:
+- `-m` (`--move`): move tasks with such a note link, _whether or not the task is complete_;
+- `-t` (`--movecomplete`): move only _completed tasks_.
 
-NB: This only operates from Daily (Calendar) notes; therefore it doesn't interfere with **linking and back-linking** between main notes.
+NB: This only operates from Daily (Calendar) notes; therefore it _doesn't_ interfere with linking and back-linking between regular notes.
 
 ### Templates for dates
 It changes any mentions of **date offset patterns** (such as `{-10d}`, `{+2w}`, `{-3m}`) into scheduled dates (e.g. `>2020-02-27`), if it can find a valid date pattern in the previous heading, previous main task if it has sub-tasks, or in the line itself. This allows for users to define simple **template sections** and copy and paste them into the note, set the due date at the start, and the other dates are then worked out for you.
@@ -96,7 +98,7 @@ Notes on this:
 ### Extend the existing @repeat mechanism
 It **creates new repeats** for newly completed tasks that include a `@repeat(interval)`, on the appropriate future date.
 
-- Valid intervals are specified as `[+][0-9][dwmqy]`. This allows for `d`ays, `w`eeks, `m`onths, `q`uarters or `y`ears.
+- Valid intervals are specified as `[+][0-9][bdwmqy]`. This allows for `b`usiness days, `d`ays, `w`eeks, `m`onths, `q`uarters or `y`ears.
 - When _interval_ is of the form `+2w` it will duplicate the task for 2 weeks after the date the _task was completed_.
 - When _interval_ is of the form `2w` it will duplicate the task for 2 weeks after the date the _task was last due_. If this can't be determined, then it defaults to the first option.
 
@@ -109,18 +111,19 @@ There are 2 ways of running the script:
 1. with no arguments (`ruby npTools.rb`), it checks all note and daily files updated in the last 24 hours. This is the way to use it automatically, running one or more times each day. (This is configurable by `HOURS_TO_PROCESS` below.)
 2. with passed filename pattern(s), where it works on any matching Calendar or Note files. For example, to match the Daily file from 24/3/2020 use `ruby npTools.rb 20200324.txt`. It can include wildcard *patterns* to match multiple files, for example `"202003*.txt"` to process all Daily files from March 2020.  (It now needs to be in double quotes for the file pattern matching to work.) If no `.` is found in the pattern, the pattern matches all files as `"*pattern*.*"`.
 
-You can also specify **options**:
-- `-h` for help, 
-- `-a` (`--noarchive`) don't archive completed tasks into the `# Done` section. _This is currently off by default, as the feature isn't yet complete to my satisfaction._
+You can also specify the following **options**:
+- `-h` (`--help`) for a list of options, 
+<!-- - `-a` (`--noarchive`) don't archive completed tasks into the `## Done` section. -->
 - `c` (`--changes HOURS`) how many hours to look back to find note changes to process, overriding the default of 24 hours (though this can be changed; see below)
-- `-m` (`--moveon`) turn on moving mentions of `>date` in a daily calendar day file to the specified date
-- `-n` (`--nomove`) turn off moving mentions of [[Note]] in a daily calendar day file to the [[Note]]. You'll want to do this if you're using the [[...]] notation for backlinks (from NP v3.0.15 onwards)
+- `-d` (`--moveondailies`) turn on moving mentions of `>date` in a daily calendar note to the specified date
+- `-i` (`--skiptoday`) don't process today's file
+- `-f` (`--skipfile=NOTETITLE[,NOTETITLE2,etc]`) don't process specific note(s)
+- `-m` (`--move`) moves mentions of [[Note#Heading]] in tasks in daily calendar day notes to the [[Note]], _whether or note the task has been completed_
+- `-t` (`--movecomplete`) moves mentions of [[Note#Heading]] in tasks in daily calendar day notes to the [[Note]], _but only when the task has been completed_
 - `-q` (`--quiet`) suppress all output, other than error messages
 - `-s` (`--keepschedules`) keep the scheduled (>) dates of completed tasks
-- `-f` (`--skipfile=NOTETITLE[,NOTETITLE2,etc]`) don't process specific note(s)
-- `-i` (`--skiptoday`) don't process today's file
-- `-v` for verbose output 
-- `-w` for more verbose output
+- `-v` for verbose (logging) output 
+- `-w` for more verbose (logging) output
 
 It works with all 3 storage options for storing NotePlan data: CloudKit (the default from NotePlan v3), iCloud Drive and Dropbox.
 
@@ -142,7 +145,7 @@ It works with all 3 storage options for storing NotePlan data: CloudKit (the def
 - `CREATE_EVENT_TAG_TO_USE`: name of tag to use to trigger creating events. Default is `#create_event`. Can ignore if not using this for event creation.
 - for completeness, `NP_BASE_DIR` automatically works out where NotePlan data files are located. (If there are multiple isntallations it selects using the priority CloudKit > iCloudDrive > DropBox.)
 - `RE_DATE_OFFSET_FORMAT`: regular expression to find date strings in your chosen format, to use as the base date in date offset patterns. See example in the code, but don't change unless you're familiar with regular expressions.
-1. Then run `ruby npTools.rb [-options]`
+6. Then run `ruby npTools.rb [-options]`
 
 The first time you attempt to `#create_event`, macOS (at least Catalina and Big Sur) will probably ask for permission to update your Calendar.
 
