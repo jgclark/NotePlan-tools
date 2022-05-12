@@ -1,12 +1,12 @@
 #!/usr/bin/env ruby
 #-------------------------------------------------------------------------------
 # NotePlan Tools script
-# by Jonathan Clark, v2.2.0, 10.5.2022
+# by Jonathan Clark, v2.2.1, 12.5.2022
 #-------------------------------------------------------------------------------
 # See README.md file for details, how to run and configure it.
 # Repository: https://github.com/jgclark/NotePlan-tools/
 #-------------------------------------------------------------------------------
-VERSION = "2.2.0"
+VERSION = "2.2.1"
 
 require 'date'
 require 'time'
@@ -239,6 +239,37 @@ def find_or_create_daily_note(yyyymmdd)
   return noteToAddTo
 end
 
+def find_note(title)
+  # Read in a note that we want to update.
+  # Error if note can't be found, and return nil
+
+  # NOTE: In NP v2.4+ there's a slight issue that there can be duplicate
+  # note titles over different sub-folders. This will likely be improved in
+  # the future, but for now I'll try to select the most recently-changed if
+  # there are matching names.
+
+  log_verbose_message_screen("    - starting find_note for '#{title}'")
+  new_note_id = nil  # for an integer, but starting as nil
+
+  # First check if it exists in existing notes read in
+  mtime = Time.new(1970, 1, 1) # i.e. the earlist possible time
+  $allNotes.each do |nn|
+    next if nn.title != title
+
+    next unless nn.modified_time > mtime
+
+    new_note_id = nn.id
+    mtime = nn.modified_time
+    log_verbose_message_screen("    - found existing match via title (id #{new_note_id}) last modified #{mtime}")
+  end
+
+  if new_note_id.nil?
+    # not found, so give an error
+    error_message_screen("    - error: can't find matching note title '#{title}'")
+  end
+  return new_note_id
+end
+
 def find_or_create_note(title)
   # Read in a note that we want to update.
   # If it doesn't exist, create it.
@@ -265,13 +296,13 @@ def find_or_create_note(title)
 
   if new_note_id.nil?
     # not found, so now we need create the note
-    puts "        - warning: can't find matching note title '#{title}' -- so will create it".colorize(InfoColour)
+    warning_message_screen("        - warning: can't find matching note title '#{title}' -- so will create it")
     new_note_id = create_new_note_file(title, NOTE_EXT)
     # begin
     #   f = File.new(filename, 'a+') # assume it goes in top level folder
     #   f.close
     # rescue StandardError => e
-    error_message_screen(  puts "ERROR: #{e.exception.message} when creating note file #{filename}")
+    error_message_screen("ERROR: #{e.exception.message} when creating note file #{filename}")
     # end
     # now find the id of this newly-created NPFile instance
     log_message_screen("    -> file '#{$allNotes[new_note_id].filename}' id #{new_note_id}")
@@ -869,19 +900,22 @@ class NPFile
       if line =~ /#{RE_NOTE_LINK}/
         # the following regex matches returns an array with one item, so make a string (by join)
         line.scan(/#{RE_NOTE_LINK_CAPTURE}/) { |m| note_link = m.join }
-        puts "  - found note link [[#{note_link}]] in a heading on line #{n + 1} of #{@line_count}" if is_heading && ($verbose > 0)
-        puts "  - found note link [[#{note_link}]] in notes on line #{n + 1} of #{@line_count}" if !is_heading && ($verbose > 0)
+        log_verbose_message_screen("  - found note link [[#{note_link}]] in a heading on line #{n + 1} of #{@line_count}") if is_heading
+        log_verbose_message_screen("  - found note link [[#{note_link}]] in notes on line #{n + 1} of #{@line_count}") unless is_heading
         m = note_link.split('#')
         if m.length > 1
           note_name = m[0]
           note_heading = m[1]
-          puts "    - and this has heading '#{note_heading}'"
+          log_verbose_message_screen("    = '#{note_name}' heading '#{note_heading}'")
         else
           note_name = note_link
         end
       end
 
-      noteToAddTo = find_or_create_note(note_name)
+      # FIXME: following isn't finding 'NotePlan Plugins'. Looks to be failing on more deeply nested notes
+      noteToAddTo = find_note(note_name)
+      break if noteToAddTo.nil?
+
       lines_to_output = ''
 
       # Remove the [[name]] text by finding first example of the string points
@@ -1427,6 +1461,7 @@ $remove_rescheduled = options.remove_rescheduled
 
 begin
   Dir.chdir(NP_NOTES_DIR)
+  # FIXME: test if this isn't finding folder/sub/note here
   Dir.glob(['{[!@]**/*,*}.txt', '{[!@]**/*,*}.md']).each do |this_file|
     next if File.zero?(this_file) # ignore if this file is empty
 
