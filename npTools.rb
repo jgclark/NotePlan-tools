@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 #-------------------------------------------------------------------------------
 # NotePlan Tools script
-# by Jonathan Clark, v2.2.1, 12.5.2022
+# by Jonathan Clark, v2.2.1, 15.5.2022
 #-------------------------------------------------------------------------------
 # See README.md file for details, how to run and configure it.
 # Repository: https://github.com/jgclark/NotePlan-tools/
@@ -889,9 +889,11 @@ class NPFile
       # completed task
       if move_only_on_complete && line !~ /#{RE_DONE_DATE_TIME}/
         # this line doesn't match, so break out of loop and go to look at next line
-        log_message_screen("  - found note link in line '#{line.chomp}' but without a @done(date); skipping.")
+        log_message_screen("  - found note link in line '#{line.chomp}' but without a @done(date): skipping.")
         n += 1
         next
+      else
+        log_message_screen("  - found note link in line '#{line.chomp}: will move.'")
       end
 
       is_heading = line =~ /^#+\s+.*/ ? true : false
@@ -912,9 +914,10 @@ class NPFile
         end
       end
 
-      # FIXME: following isn't finding 'NotePlan Plugins'. Looks to be failing on more deeply nested notes
       noteToAddTo = find_note(note_name)
       break if noteToAddTo.nil?
+
+      # FIXME: there's also a slight bug in the in-line manipulation at end of @done()
 
       lines_to_output = ''
 
@@ -1441,17 +1444,6 @@ $verbose = $quiet ? 0 : options.verbose # if quiet, then verbose has to  be 0
 $archive = options.archive
 $remove_rescheduled = options.remove_rescheduled
 
-#------------------------------
-# Test for append_line_to_section
-# Dir.chdir(NP_CALENDAR_DIR)
-# this_note = NPFile.new("20210225.md")
-# # Add new lines to end of file, creating a ### Media section before it if it doesn't exist
-# this_note.append_line_to_section("> test line to add 1\n- test line to add 2", "")
-# this_note.append_line_to_section("> test line to add 3\n- test line to add 4", "### Tasks")
-# this_note.append_line_to_section("> test line to add 5\n- test line to add 6", "### Tasks")
-# this_note.rewrite_file
-# exit
-
 #--------------------------------------------------------------------------------------
 # Start by reading all Notes files in
 # (This is needed to have a list of all note titles that we might be moving tasks to.)
@@ -1461,8 +1453,7 @@ $remove_rescheduled = options.remove_rescheduled
 
 begin
   Dir.chdir(NP_NOTES_DIR)
-  # FIXME: test if this isn't finding folder/sub/note here
-  Dir.glob(['{[!@]**/*,*}.txt', '{[!@]**/*,*}.md']).each do |this_file|
+  Dir.glob(File.join('[!@]*/**/*.{md,txt}')).each do |this_file|
     next if File.zero?(this_file) # ignore if this file is empty
 
     $allNotes << NPFile.new(this_file)
@@ -1541,7 +1532,7 @@ else
       next if File.zero?(this_file) # ignore if this file is empty
       # if modified time (mtime) in the last 24 hours
       next unless File.mtime(this_file) > (time_now - hours_to_process * 60 * 60)
-      
+
       log_verbose_message_screen("    Found relevant daily file #{this_file}, updated #{File.mtime(this_file)}, size #{File.size(this_file)}")
       this_note = NPFile.new(this_file)
       $allNotes << this_note
