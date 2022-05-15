@@ -8,6 +8,7 @@ require 'date'
 require 'cgi'
 require 'colorize'
 require 'optparse' # more details at https://docs.ruby-lang.org/en/2.1.0/OptionParser.html
+# TODO: finish bring over better options and logging from npTools
 
 #-------------------------------------------------------------------------------
 # Setting variables to tweak
@@ -96,7 +97,7 @@ opt_parser = OptionParser.new do |opts|
     $verbose = true
   end
 end
-opt_parser.parse! # parse out options, leaving file patterns to process
+opt_parser.parse![ARGV] # parse out options, leaving file patterns to process
 $verbose = options[:verbose]
 
 info_message_screen("Starting to tidy web clippings at #{$date_time_now_human_fmttd}.")
