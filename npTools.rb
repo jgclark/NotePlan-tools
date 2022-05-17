@@ -1,12 +1,12 @@
 #!/usr/bin/env ruby
 #-------------------------------------------------------------------------------
 # NotePlan Tools script
-# by Jonathan Clark, v2.2.1, 15.5.2022
+# by Jonathan Clark, v2.2.2, 17.5.2022
 #-------------------------------------------------------------------------------
 # See README.md file for details, how to run and configure it.
 # Repository: https://github.com/jgclark/NotePlan-tools/
 #-------------------------------------------------------------------------------
-VERSION = "2.2.1"
+VERSION = "2.2.2"
 
 require 'date'
 require 'time'
@@ -162,45 +162,9 @@ def calc_offset_date(old_date, interval)
   return old_date + days_to_add
 end
 
-def create_new_note_file(title, ext)
-  # Populate empty NPFile object for a *non-daily note*, adding just title.
-  # Returns id of new note
-  # Use x-callback scheme to add a new note in NotePlan,
-  # as defined at http://noteplan.co/faq/General/X-Callback-Url%20Scheme/
-  #   noteplan://x-callback-url/addNote?text=New%20Note&openNote=no
-  # FIXME: not working ... perhaps just write to the file system instead, as URI is deprecated.
-  # Open a note identified by the title or date.
-  # Parameters:
-  # - noteTitle optional, will be prepended if it is used
-  # - text optional, text will be added to the note
-  # - openNote optional, values: yes (opens the note, if not already selected), no
-  # - subWindow optional (only Mac), values: yes (opens note in a subwindow) and no
-
-  # NOTE: So far this can only create notes in the top-level Notes folder
-  # Does cope with emojis in titles.
-
-  title_encoded = URI.escape(title)
-  uriEncoded = "noteplan://x-callback-url/addNote?noteTitle=#{title_encoded}&openNote=no"
-  response = `open "#{uriEncoded}"`
-  if response != ''
-    error_message_screen("  Error #{response} trying to add note with #{uriEncoded}. Exiting.")
-    exit
-  end
-
-  # Now read this new file into the $allNotes array
-  Dir.chdir(NP_NOTES_DIR)
-  sleep(2) # wait for the file to become available. TODO: probably a smarter way to do this. What about marking as changed, and adding to a separate array of new notes to write out?
-  filename = "#{title}.#{ext}"
-  new_note = NPFile.new(filename)
-  new_note_id = new_note.id
-  $allNotes[new_note_id] = new_note # now the following
-  log_verbose_message_screen("Added new note id #{new_note_id} with title '#{title}' and filename '#{filename}'. New $allNotes count = #llNotes.count}")
-  return new_note_id
-end
-
-def find_or_create_daily_note(yyyymmdd)
+def find_daily_note(yyyymmdd)
   # Read in a note that we want to update. If it doesn't exist, create it.
-  log_verbose_message_screen("    - starting find_or_create_daily_note for #{yyyymmdd}")
+  log_verbose_message_screen("    - starting find_daily_note for #{yyyymmdd}")
   filename = "#{yyyymmdd}.#{NOTE_EXT}"
   noteToAddTo = nil  # for an integer, but starting as nil
 
@@ -222,18 +186,8 @@ def find_or_create_daily_note(yyyymmdd)
       noteToAddTo = $npfile_count
       log_verbose_message_screen("      - read in match via filename (-> id #{noteToAddTo}) ")
     else
-      # finally, we need create the note
-      puts "        - warning: can't find matching note filename '#{filename}' -- so will create it".colorize(InfoColour)
-      begin
-        f = File.new(filename, 'a+')
-        f.close
-      rescue StandardError => e
-        error_message_screen("ERROR: #{e.exception.message} when creating daily note file #{filename}")
-      end
-      $allNotes << NPFile.new(filename)
-      # now find the id of this newly-created NPFile instance
-      noteToAddTo = $npfile_count
-      log_message_screen("    -> file '#{$allNotes[noteToAddTo - 1].filename}' id #{noteToAddTo}")
+      # warn user it doesn't exist
+      warning_message_screen("        - warning: can't find matching note filename '#{filename}'")
     end
   end
   return noteToAddTo
@@ -270,16 +224,15 @@ def find_note(title)
   return new_note_id
 end
 
-def find_or_create_note(title)
+def find_note(title)
   # Read in a note that we want to update.
-  # If it doesn't exist, create it.
 
   # NOTE: In NP v2.4+ there's a slight issue that there can be duplicate
   # note titles over different sub-folders. This will likely be improved in
   # the future, but for now I'll try to select the most recently-changed if
   # there are matching names.
 
-  log_verbose_message_screen("    - starting find_or_create_note for '#{title}'")
+  log_verbose_message_screen("    - starting find_note for '#{title}'")
   new_note_id = nil  # for an integer, but starting as nil
 
   # First check if it exists in existing notes read in
@@ -295,17 +248,8 @@ def find_or_create_note(title)
   end
 
   if new_note_id.nil?
-    # not found, so now we need create the note
+    # not found, so warn user
     warning_message_screen("        - warning: can't find matching note title '#{title}' -- so will create it")
-    new_note_id = create_new_note_file(title, NOTE_EXT)
-    # begin
-    #   f = File.new(filename, 'a+') # assume it goes in top level folder
-    #   f.close
-    # rescue StandardError => e
-    error_message_screen("ERROR: #{e.exception.message} when creating note file #{filename}")
-    # end
-    # now find the id of this newly-created NPFile instance
-    log_message_screen("    -> file '#{$allNotes[new_note_id].filename}' id #{new_note_id}")
   end
   return new_note_id
 end
@@ -779,7 +723,7 @@ class NPFile
       yyyymmdd = "#{yyyy_mm_dd[0..3]}#{yyyy_mm_dd[5..6]}#{yyyy_mm_dd[8..9]}"
 
       # Find the existing daily note to add to, or read in, or create
-      noteToAddTo = find_or_create_daily_note(yyyymmdd)
+      noteToAddTo = find_daily_note(yyyymmdd)
       lines_to_output = ''
 
       # Remove the >date text by finding string points
@@ -889,11 +833,11 @@ class NPFile
       # completed task
       if move_only_on_complete && line !~ /#{RE_DONE_DATE_TIME}/
         # this line doesn't match, so break out of loop and go to look at next line
-        log_message_screen("  - found note link in line '#{line.chomp}' but without a @done(date): skipping.")
+        log_message_screen("  - skipping note link in incomplete task '#{line.chomp}'")
         n += 1
         next
       else
-        log_message_screen("  - found note link in line '#{line.chomp}: will move.'")
+        log_message_screen("  - moving note link in line '#{line.chomp}'".to_s.bold)
       end
 
       is_heading = line =~ /^#+\s+.*/ ? true : false

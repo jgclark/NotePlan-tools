@@ -23,7 +23,6 @@ In more detail:
 - where the line is a heading, it moves the heading and all following lines until a blank line, or the next heading of the same level
 - where the line isn't a heading, it moves the line and any following indented lines (optionally terminated by a blank line)
 - the lines are inserted after a section heading (e.g. '### Tasks') as defined in the DAILY_TASKS_SECTION_NAME constant (or after header if this is blank). (To configure this constant, see below.)
-- where the note for the mentioned `>date` doesn't exist, it is created first
 
 NB: This only operates from Daily (Calendar) notes; it therefore doesn't interfere with **linking and back-linking** between main notes.
 
@@ -33,7 +32,6 @@ The script can move any Daily note tasks with **a `[[Note title]]`** in it to th
 In more detail:
 - where the line is a heading, it moves the heading and all following lines until a blank line, or the next heading of the same level
 - where the line isn't a heading, it moves the line and any following indented lines (optionally terminated by a blank line)
-- where the note for a  `[[Note link]]` doesn't exist, it is created in the top-level Notes folder first
 - if there is a `>YYYY-MM-DD` date specified in the line already, then carry that over, otherwise  add today's date
 
 This feature can be turned on using two different options, with slightly different triggers:

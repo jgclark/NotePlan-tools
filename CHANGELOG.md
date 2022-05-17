@@ -1,5 +1,8 @@
 # CHANGELOG
 As always, `npTools -h` to see the full list of current options.
+## v2.2.2, 2022-05-17
+- [Change] Remove the code to make new notes where linked notes aren't found, as it was unreliable. It will now simply warn the user.
+
 ## v2.2.0, 2022-05-10
 - [Add] Adds the `--movecomplete` option to move a task from a calendar note to the project note indicated by [[note#title]] but only when the task has been completed. (The earlier '--move' option remains; this does the same, but operates whether or not the task has been completed.)
 - [Add] Understands notes with titles in the frontmatter (added NP v3.4.x)
