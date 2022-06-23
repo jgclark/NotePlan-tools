@@ -1,12 +1,14 @@
 #!/usr/bin/env ruby
 #-------------------------------------------------------------------------------
 # Script to tidy and clean up HTML text clipped into markdown files
-# by Jonathan Clark, v1.3.1, 23.6.2022
+# by Jonathan Clark, v1.3.x, 23.6.2022
 # Tested with a number of files from
 # - desiringgod.org
 # - wordpress.com/mbarrettdavie
 #-------------------------------------------------------------------------------
-VERSION = "1.3.1"
+# TODO: sort out what to do with no H1.
+#-------------------------------------------------------------------------------
+VERSION = "1.3.3"
 require 'date'
 require 'cgi'
 require 'colorize'
@@ -16,7 +18,7 @@ require 'ostruct'
 #-------------------------------------------------------------------------------
 # Setting variables to tweak
 #-------------------------------------------------------------------------------
-LIVE = true
+LIVE = false
 
 NOTE_EXT = "md" # or "txt"
 # FILEPATH = "/Users/jonathan/Dropbox/IFTTT/Clips" # or ...
@@ -25,7 +27,7 @@ INPUT_FILEPATH = "/Users/jonathan/Library/Mobile Documents/iCloud~is~workflow~my
 ARCHIVE_FILEPATH = "#{INPUT_FILEPATH}/tidyClippingsOriginals"
 DATE_TIME_HUMAN_FORMAT = '%e %b %Y %H:%M'.freeze
 DATE_TIME_LOG_FORMAT = '%Y%m%d%H%M'.freeze # only used in logging
-IGNORE_SECTION_TITLES = ['New Resources', 'Menu', 'Archive', 'Meta', 'Past navigation', 'Shared', 'Share this', 'Share this post', 'How we use cookies', 'Skip to content', 'Like this', 'Leave a Reply', '_Related', 'Related Posts', 'More by this author', 'Ways to Follow', 'My recent publications', 'Other Publications']
+IGNORE_SECTION_TITLES = ['New Resources', 'Menu', 'Archive', 'Meta', 'Subscribe', 'Past navigation', 'Shared', 'Share this', 'Share this post', 'How we use cookies', 'Skip to content', 'Like this', 'Leave a Reply', '_Related', 'Related Posts', 'More by this author', 'Ways to Follow', 'My recent publications', 'Other Publications', 'Solid Joys', 'Look at the Book']
 
 #-------------------------------------------------------------------------------
 # Other Constants
@@ -119,6 +121,9 @@ def cleanup_line(line)
   # replace '\.' with '.'
   line.gsub!(/\\\./, '.')
 
+  # replace opening '* ' with '- '
+  line.gsub!(/(\s*)\*\s/, '\1- ')
+
   # replace '## [' with '[' (Desiring God)
   line.gsub!(/## \[/, '[')
 
@@ -156,6 +161,11 @@ def help_identify_metadata(line)
   # wordpress possible way of detecting publish date
   line = 'poss_date: ' + line if line =~ /\[.*\]\(.*\/\d{4}\/\d{2}\/\d{2}\/\)/
 
+  # DesiringGod.org specifics
+  line = "site: https://www.desiringgod.org/" if line =~ /\/about-us/
+
+  # Psephizo specifics
+  line = '## ' + line if line =~ /^Categories .*https:\/\/www.psephizo.com\//
   return line
 end
 
@@ -220,7 +230,7 @@ begin
       line = help_identify_metadata(line)
 
       if line != line_in
-        # log_message_screen(" #{n}: #{line_in}\n   -> #{line}")
+        # log_message_screen(" #{n}~ #{line}")
         lines[n] = line
       end
 
@@ -232,7 +242,7 @@ begin
     last_line = ""
     ignore_before = 0
     ignore_after = 99999
-    ignore_this_section = true
+    ignore_this_section = false
     last_heading_level = 6 # start low
     this_heading_level = 6 # start low
     re_ignore_sections = "^#+\\s+(#{IGNORE_SECTION_TITLES.join('|')})" # lines that start with MD headings then any of those sections
@@ -259,12 +269,6 @@ begin
         end
       end
 
-      # if this is the Comments section then ignore after this (unless we already have found an ignore point)
-      if line =~ /^\s*\d*\s*Comments/ && ignore_after.zero?
-        ignore_after = n - 1
-        info_message_screen("   #{n}: found comments: will ignore after line #{n}")
-      end
-
       # If a new section, should we ignore it?
       if line =~ /^#+\s+/
         last_heading_level = this_heading_level
@@ -276,8 +280,15 @@ begin
           log_message_screen("   #{n}: new section '#{line}' #{this_heading_level} (<= #{last_heading_level}) stopping ignore")
           ignore_this_section = false
         else
-          log_message_screen("   #{n}: new section '#{line}' #{this_heading_level} (> #{last_heading_level})")
+          log_message_screen("   #{n}: new section '#{line}' #{this_heading_level} (> #{last_heading_level}) : ignore_this_section = #{ignore_this_section}")
         end
+      end
+
+      # if this is the Comments section then ignore after this (unless we already have found an ignore point)
+      if line =~ /^#+\s+(Comments|\d*\s*Comments on\s|\d*\s*thoughts on\s)/i && ignore_after == 99999
+        ignore_after = n - 1
+        ignore_this_section = true
+        info_message_screen("   #{n}: found comments: will ignore after line #{n}")
       end
 
       if ignore_this_section
@@ -288,7 +299,7 @@ begin
         line = ""
 
       else
-        # log_message_screen("     #{n}: #{truncate_text(line, 60, true)}") if n < 100
+        # log_message_screen("     #{n}: #{truncate_text(line, 70, true)}") if n < 100
 
         # insert blank line before heading
         if !last_line.empty? && line =~ /^#+\s+/
@@ -323,17 +334,21 @@ begin
           line.scan(/\s*poss_date[:\s]+(.*)/) { |m| poss_date = m.join }
           info_message_screen(" found poss_date: #{poss_date}")
         end
-        if line =~ /^\s*author[:\s]+.+/i # TODO: test me
-          line.scan(/^\s*author[:\s]+(.*)/i) { |m| author = m.join }
+        if line =~ /^\s*(author|by)[:\s]+.+/i # TODO: test me
+          line.scan(/^\s*(?:author|by)[:\s]+(.*)/i) { |m| author = m.join }
+          info_message_screen(" found author: #{author}")
+        end
+        if line =~ /\[.*?\]\(.*?\/authors?\/.*?\)/i # TODO: test me
+          line.scan(/\[(.*?)\]\(.*?\/authors?\/.*?\)/i) { |m| author = m.join }
+          info_message_screen(" found author: #{author}")
+        end
+        if line =~ /^\s*by[:\s]+\[.+\]/i # TODO: test me
+          line.scan(/^\s*by[:\s]+\[(.+)\]/i) { |m| author = m.join } # .join turns ['a'] to 'a'
           info_message_screen(" found author: #{author}")
         end
         if line =~ /^\s*poss_author[:\s]+.+/i
           line.scan(/^\s*poss_author[:\s]+(.*)/i) { |m| poss_author = m.join }
           info_message_screen(" found poss_author: #{poss_author}")
-        end
-        if line =~ /^\s*by[:\s]+.+/i # TODO: test me
-          line.scan(/^\s*by[:\s]+(.*)/i) { |m| author = m.join } # .join turns ['a'] to 'a'
-          info_message_screen(" found author: #{author}")
         end
         if line =~ /^\s*tags?[:\s]+.+/i
           line.scan(/^Tags?[:\s]+\[?([^\]]+)/i) { |m| tags << m.join } # add to array, having first turned ['a'] to 'a'
@@ -347,9 +362,21 @@ begin
           line.scan(/\/category\/([^\/]+)\//i) { |m| tags << m.join }
           info_message_screen(" found tags (from categories): #{tags}")
         end
+        if line =~ /\/tag\/.*?\//i
+          line.scan(/\/tag\/([^\/]+)\//i) { |m| tags << m.join }
+          info_message_screen(" found tags: #{tags}")
+        end
+        if line =~ /\[Home\]\(.*\)/i # TODO: test me
+          line.scan(/\[Home\]\((.*)\)/i) { |m| site = m.join}
+          info_message_screen(" found site: #{site}")
+        end
         if line =~ /^site:\s+.+/i # TODO: test me
           line.scan(/^site:\s+(.*)/i) { |m| site = m.join}
           info_message_screen(" found site: #{site}")
+        end
+        if line =~ /^\[View web version\]\(.+\)/i
+          line.scan(/^\[View web version\]\((.+)\)/i) { |m| source = m.join }
+          info_message_screen(" found source: #{source}")
         end
         if line =~ /^poss_source:\s+.+/i
           line.scan(/^poss_source:\s+(.*)/i) { |m| poss_source = m.join }
@@ -359,7 +386,7 @@ begin
         # try just parsing line for a valid date string
         begin
           if poss_date.nil?
-            poss_date = Date.parse(truncate_text(line, 24))
+            poss_date = Date.parse(truncate_text(line, 30))
             info_message_screen(" found poss date: #{poss_date}")
           end
         rescue Date::Error => e
@@ -371,7 +398,7 @@ begin
       last_line = line
     end
     info_message_screen("  After second pass, #{lines.size} lines left")
-    log_message_screen("  Will ignore before/after = #{ignore_before} / #{ignore_after}")
+    log_message_screen("  Will ignore before l.#{ignore_before} & after l.#{ignore_after}")
 
     #-------------------------------------------------------------------------
     # Form the frontmatter section
@@ -380,7 +407,6 @@ begin
     fm_author = author || poss_author || ""
     fm_clip_date = clip_date || $date_time_now_log_fmttd # fallback to current date
     fm_doc_date = doc_date || poss_date || "?"
-    pp tags
     fm_tags = tags.join(', ') || ""
     fm_source = source || poss_source || site || ""
     fm_generated = "#{$date_time_now_log_fmttd} by tidyClippings v#{VERSION}"
