@@ -1,12 +1,12 @@
 #!/usr/bin/env ruby
 #-------------------------------------------------------------------------------
 # NotePlan Tools script
-# by Jonathan Clark, v2.2.2, 17.5.2022
+# by Jonathan Clark, v2.3.0, 26.6.2022
 #-------------------------------------------------------------------------------
 # See README.md file for details, how to run and configure it.
 # Repository: https://github.com/jgclark/NotePlan-tools/
 #-------------------------------------------------------------------------------
-VERSION = "2.2.2"
+VERSION = "2.3.0"
 
 require 'date'
 require 'time'
@@ -162,10 +162,10 @@ def calc_offset_date(old_date, interval)
   return old_date + days_to_add
 end
 
-def find_daily_note(yyyymmdd)
+def find_daily_note(date_string)
   # Read in a note that we want to update. If it doesn't exist, create it.
-  log_verbose_message_screen("    - starting find_daily_note for #{yyyymmdd}")
-  filename = "#{yyyymmdd}.#{NOTE_EXT}"
+  log_verbose_message_screen("    - starting find_daily_note for #{date_string}")
+  filename = "#{date_string}.#{NOTE_EXT}"
   noteToAddTo = nil  # for an integer, but starting as nil
 
   # First check if it exists in existing notes read in
@@ -180,6 +180,38 @@ def find_daily_note(yyyymmdd)
     # now try reading in an existing daily note
     Dir.chdir(NP_CALENDAR_DIR)
     log_message_screen("    - Looking for daily note filename #{filename}:")
+    if File.exist?(filename)
+      $allNotes << NPFile.new(filename)
+      # now find the id of this most-recently-added NPFile instance
+      noteToAddTo = $npfile_count
+      log_verbose_message_screen("      - read in match via filename (-> id #{noteToAddTo}) ")
+    else
+      # warn user it doesn't exist
+      warning_message_screen("        - warning: can't find matching note filename '#{filename}'")
+    end
+  end
+  return noteToAddTo
+end
+
+def find_weekly_note(date_string)
+  # Note: Not yet used
+  # Read in a note that we want to update. If it doesn't exist, create it.
+  log_verbose_message_screen("    - starting find_weekly_note for #{date_string}")
+  filename = "#{date_string}.#{NOTE_EXT}"
+  noteToAddTo = nil  # for an integer, but starting as nil
+
+  # First check if it exists in existing notes read in
+  $allNotes.each do |nn|
+    next if nn.filename != filename
+
+    noteToAddTo = nn.id
+    log_verbose_message_screen("      - found match via filename (id #{noteToAddTo}) ")
+  end
+
+  if noteToAddTo.nil?
+    # now try reading in an existing weekly note
+    Dir.chdir(NP_CALENDAR_DIR)
+    log_message_screen("    - Looking for weekly note filename #{filename}:")
     if File.exist?(filename)
       $allNotes << NPFile.new(filename)
       # now find the id of this most-recently-added NPFile instance
@@ -224,36 +256,6 @@ def find_note(title)
   return new_note_id
 end
 
-def find_note(title)
-  # Read in a note that we want to update.
-
-  # NOTE: In NP v2.4+ there's a slight issue that there can be duplicate
-  # note titles over different sub-folders. This will likely be improved in
-  # the future, but for now I'll try to select the most recently-changed if
-  # there are matching names.
-
-  log_verbose_message_screen("    - starting find_note for '#{title}'")
-  new_note_id = nil  # for an integer, but starting as nil
-
-  # First check if it exists in existing notes read in
-  mtime = Time.new(1970, 1, 1) # i.e. the earlist possible time
-  $allNotes.each do |nn|
-    next if nn.title != title
-
-    next unless nn.modified_time > mtime
-
-    new_note_id = nn.id
-    mtime = nn.modified_time
-    log_verbose_message_screen("      - found existing match via title (id #{new_note_id}) last modified #{mtime}")
-  end
-
-  if new_note_id.nil?
-    # not found, so warn user
-    warning_message_screen("        - warning: can't find matching note title '#{title}' -- so will create it")
-  end
-  return new_note_id
-end
-
 def osascript(script)
   # Run applescript
   # from gist https://gist.github.com/dinge/6983008
@@ -263,7 +265,7 @@ end
 
 #-------------------------------------------------------------------------
 # Class definition: NPFile
-# NB: in this script this class covers Note *and* Daily files
+# NB: in this script this class covers Note *and* Daily *and* Weekly files
 #-------------------------------------------------------------------------
 class NPFile
   # Define the attributes that need to be visible outside the class instances
@@ -311,10 +313,15 @@ class NPFile
     @line_count = @lines.size
     # Now make a title for this file:
     if @filename =~ /\d{8}\.(txt|md)/
-      # for Calendar file, use the date from filename
+      # for Daily Calendar file, use the date from filename
       @title = @filename[0..7]
       @is_calendar = true
       @is_today = @title == $date_today
+
+    elsif @filename =~ /\d{4}-W\d{2}\.(txt|md)/
+      # for Weekly Calendar file, use the date from filename
+      @title = @filename[0..8]
+      @is_calendar = true # TODO: review what this implies
 
     elsif @lines[0] =~ /^---/
       # for Note file, find from frontmatter if present
@@ -807,6 +814,7 @@ class NPFile
     log_message_screen("  - moved #{moved} lines to daily notes")
   end
 
+  # TODO: see if Weekly notes should be included here too
   def move_daily_ref_to_notes(move_only_on_complete)
     # Move items in daily note with a [[note]] link to that note, inserting after Title,
     # or after the Heading if supplied in [[note#heading]].
@@ -1233,9 +1241,9 @@ class NPFile
           updated_line_without_done.rstrip!
           outline = "#{updated_line_without_done} >#{new_repeat_date}"
 
-          # Insert this new line after current line
-          n += 1
+          # Insert this new line at current line (i.e. before the earlier repeat)
           insert_new_line_at_line(outline, n)
+          n += 1
         end
       end
       n += 1
@@ -1431,13 +1439,13 @@ if ARGV.count.positive?
       end
     end
 
-    # Now look for matches in Daily/Calendar files
+    # Now look for matches in Calendar files
     Dir.chdir(NP_CALENDAR_DIR)
     ARGV.each do |pattern|
       # if pattern has a '.' in it assume it is a full filename ...
       # ... otherwise treat as close to a regex term as possible with Dir.glob
       glob_pattern = pattern =~ /\./ ? pattern : '*' + pattern + '*.{md,txt}'
-      log_message_screen("  Looking for daily note filenames matching glob_pattern #{glob_pattern}:")
+      log_message_screen("  Looking for calendar note filenames matching glob_pattern #{glob_pattern}:")
       Dir.glob(glob_pattern).each do |this_file|
         log_message_screen("  - #{this_file}")
         # read in file unless this file is empty
@@ -1468,16 +1476,16 @@ else
     error_message_screen("ERROR: #{e.exception.message} when finding recently changed files")
   end
 
-  # Also read metadata for all Daily files, and find those altered in the last 24 hours
+  # Also read metadata for all Calendar files, and find those altered in the last 24 hours
   begin
     Dir.chdir(NP_CALENDAR_DIR)
     Dir.glob(['{[!@]**/*,*}.{txt,md}']).each do |this_file|
-      # log_verbose_message_screen("    Checking daily file #{this_file}, updated #{File.mtime(this_file)}, size #{File.size(this_file)}")
+      # log_verbose_message_screen("    Checking Calendar file #{this_file}, updated #{File.mtime(this_file)}, size #{File.size(this_file)}")
       next if File.zero?(this_file) # ignore if this file is empty
       # if modified time (mtime) in the last 24 hours
       next unless File.mtime(this_file) > (time_now - hours_to_process * 60 * 60)
 
-      log_verbose_message_screen("    Found relevant daily file #{this_file}, updated #{File.mtime(this_file)}, size #{File.size(this_file)}")
+      log_verbose_message_screen("    Found relevant Calendar file #{this_file}, updated #{File.mtime(this_file)}, size #{File.size(this_file)}")
       this_note = NPFile.new(this_file)
       $allNotes << this_note
       # copy the $allNotes item into $notes array
