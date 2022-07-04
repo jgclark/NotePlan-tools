@@ -8,7 +8,7 @@
 #-------------------------------------------------------------------------------
 # TODO: sort out what to do with no H1.
 #-------------------------------------------------------------------------------
-VERSION = "1.3.3"
+VERSION = "1.3.5"
 require 'date'
 require 'cgi'
 require 'colorize'
@@ -18,16 +18,17 @@ require 'ostruct'
 #-------------------------------------------------------------------------------
 # Setting variables to tweak
 #-------------------------------------------------------------------------------
-LIVE = false
+LIVE = true
 
 NOTE_EXT = "md" # or "txt"
 # FILEPATH = "/Users/jonathan/Dropbox/IFTTT/Clips" # or ...
 INPUT_FILEPATH = "/Users/jonathan/Library/Mobile Documents/iCloud~is~workflow~my~workflows/Documents"
 # ARCHIVE_FILEPATH = "/Users/jonathan/Dropbox/IFTTT/Archive" # or ...
 ARCHIVE_FILEPATH = "#{INPUT_FILEPATH}/tidyClippingsOriginals"
+DATE_ISO_FORMAT = '%Y-%m-%d'.freeze
 DATE_TIME_HUMAN_FORMAT = '%e %b %Y %H:%M'.freeze
 DATE_TIME_LOG_FORMAT = '%Y%m%d%H%M'.freeze # only used in logging
-IGNORE_SECTION_TITLES = ['New Resources', 'Menu', 'Archive', 'Meta', 'Subscribe', 'Past navigation', 'Shared', 'Share this', 'Share this post', 'How we use cookies', 'Skip to content', 'Like this', 'Leave a Reply', '_Related', 'Related Posts', 'More by this author', 'Ways to Follow', 'My recent publications', 'Other Publications', 'Solid Joys', 'Look at the Book']
+IGNORE_SECTION_TITLES = ['IgnoreMe', 'New Resources', 'Menu', 'Archive', 'Meta', 'Subscribe', 'Past navigation', 'Shared', 'Share this', 'Share this post', 'How we use cookies', 'Skip to content', 'Like this', 'Leave a Reply', '_Related', 'Related Posts', 'Related Articles', 'More by this author', 'Ways to Follow', 'My recent publications', 'Other Publications', 'Publications', 'Follwers', 'Site Map', 'Solid Joys', 'Look at the Book', 'Join The Conversation', 'About Us', 'Follow Us', 'Events', 'Ministries', 'Blog Archive']
 
 #-------------------------------------------------------------------------------
 # Other Constants
@@ -57,6 +58,7 @@ String.disable_colorization true if tty_code == 'not a tty'
 time_now = Time.now
 $date_time_now_human_fmttd = time_now.strftime(DATE_TIME_HUMAN_FORMAT)
 $date_time_now_log_fmttd = time_now.strftime(DATE_TIME_LOG_FORMAT)
+$date_now = time_now.strftime(DATE_ISO_FORMAT)
 $verbose = false
 $npfile_count = 0
 
@@ -81,6 +83,7 @@ end
 
 def truncate_text(text, max_length = 100000, use_elipsis = false)
   raise ArgumentError, "max_length must be positive" unless max_length.positive?
+  return '' if text.nil?
 
   return text if text.size <= max_length
 
@@ -107,6 +110,7 @@ def cleanup_line(line)
   line.gsub!(/&gt;/, ">")
   line.gsub!(/&hellip;/, "...")
   line.gsub!(/&nbsp;/, " ")
+  line.gsub!(/%20/, " ")
 
   # replace smart quotes with dumb ones
   line.gsub!(/“/, '"')
@@ -130,12 +134,19 @@ def cleanup_line(line)
   # drop base64 image lines
   line = '' if line =~ /!\[\]\(data:image\/gif;base64/
 
+  # Remove some lines which aren't interesting
+  line = '' if line =~ /^Previous article/i || line =~ /^Next article/i
+  line = '' if line =~ /^\[Share\]/i
+  line = '' if line =~ /^\\-/
+  line = '' if line == "#popclipped"
+  line = '' if line == "#clipped"
+  line = '' if line == "[Donate](/donate)"
+  line = '' if line == "Submit"
+  line = '' if line == "[News & Updates](/posts)"
+
   # replace odd things in Stocki '**_ ... _**' with simpler '_..._'
   line.gsub!(/\*\*_/, '_')
   line.gsub!(/_\*\*/, '_')
-
-  # drop #clipped or #popclipped tags that are the whole of a line
-  line = '' if line =~ /^#popclipped$/i || line =~ /^#clipped$/i
 
   # replace a line just surrounded by **...** with an H4 instead
   line.gsub!(/^\s*\*\*(.*)\*\*\s*$/, '#### \1')
@@ -148,10 +159,23 @@ def cleanup_line(line)
   return line
 end
 
-def help_identify_metadata(line)
-  # change '# Menu' to '#Menu' to allow us to read following section for possible metadata
-  line = '#Menu' if line =~ /^# Menu/
+def help_identify_sections(line)
+  # Fix headings that are missing heading markers
+  line = '#Menu' if line =~ /^# Menu/i
+  line = '## Join the Conversation' if line =~ /^Join the Conversation$/i
+  line = '## About Us' if line =~ /^# ABOUT US/i
+  line = '## Follow Us' if line =~ /^FOLLOW US$/i
 
+  # Change some heading levels
+  line = '### Labels' if line =~ /^## Labels$/i
+
+  # Ignore sections without heading text
+  line = '## IgnoreMe' if line =~ /^#+\s*$/
+
+  return line
+end
+
+def help_identify_metadata(line)
   # wordpress possible way of detecting source URL
   line.gsub!(/^\[Leave a comment\]\((.*?)\/#respond\)/, 'poss_source: \1')
 
@@ -164,8 +188,12 @@ def help_identify_metadata(line)
   # DesiringGod.org specifics
   line = "site: https://www.desiringgod.org/" if line =~ /\/about-us/
 
+  # blogspot.com specifics
+  line.gsub!('# ', 'site: ') if line =~ /^#\s.*\(https:\/\/.*\.blogspot\.com\// # first H1 is site title not post title
+
   # Psephizo specifics
   line = '## ' + line if line =~ /^Categories .*https:\/\/www.psephizo.com\//
+
   return line
 end
 
@@ -226,6 +254,8 @@ begin
       # Fix all sorts of things in the line
       line = cleanup_line(line)
 
+      line = help_identify_sections(line)
+
       # See what we can do to help identify metadata, and change accordingly
       line = help_identify_metadata(line)
 
@@ -254,7 +284,7 @@ begin
       n += 1
       line = lines[n]
       # first check for H1 lines (that shouldn't be ignored)
-      if line =~ /^#\s/ && line !~ /#{re_ignore_sections}/
+      if line =~ /^#\s/ && line !~ /#{re_ignore_sections}/i
         # this is the first H1 so use this as a title and starting line
         if ignore_before.zero?
           ignore_before = n
@@ -272,8 +302,8 @@ begin
       # If a new section, should we ignore it?
       if line =~ /^#+\s+/
         last_heading_level = this_heading_level
-        this_heading_level = line.index(' ')
-        if line =~ /#{re_ignore_sections}/
+        this_heading_level = line.index(' ') # = how many chars before first space?
+        if line =~ /#{re_ignore_sections}/i
           log_message_screen("   #{n}: will ignore new section '#{line}'")
           ignore_this_section = true
         elsif this_heading_level <= last_heading_level
@@ -285,13 +315,13 @@ begin
       end
 
       # if this is the Comments section then ignore after this (unless we already have found an ignore point)
-      if line =~ /^#+\s+(Comments|\d*\s*Comments on\s|\d*\s*thoughts on\s)/i && ignore_after == 99999
+      if line =~ /^#+\s+(No comments|Comments|\d*\s*Comments on\s|\d*\s*thoughts on\s)/i && ignore_after == 99999
         ignore_after = n - 1
         ignore_this_section = true
-        info_message_screen("   #{n}: found comments: will ignore after line #{n}")
+        info_message_screen("#{n}: found Comments section: will ignore after line #{n}")
       end
 
-      if ignore_this_section
+      if ignore_this_section || n > ignore_after # TODO: test me
         # We're in an ignore section, so blank this line
         # log_message_screen("   #{n}/#{lines.size}: ignored")
         last_line = line
@@ -302,98 +332,144 @@ begin
         # log_message_screen("     #{n}: #{truncate_text(line, 70, true)}") if n < 100
 
         # insert blank line before heading
-        if !last_line.empty? && line =~ /^#+\s+/
-          # log_message_screen(" #{n}   inserted: empty line before heading '#{line}'")
-          lines.insert(n, "")
-          last_line = ""
-          n -= 1
-          redo # i.e. redo this particular line, now that we've added the blank line
-        end
+        # if !last_line.empty? && line =~ /^#+\s+/
+        #   log_message_screen(" #{n}   inserted: empty line before heading '#{line}'")
+        #   lines.insert(n, "")
+        #   last_line = ""
+        #   n -= 1
+        #   redo # i.e. redo this particular line, now that we've added the blank line
+        # end
 
         # remove blank line after heading
-        if last_line =~ /^#+\s+/ && line.empty?
-          # log_message_screen(" #{n}   removed: empty line after heading '#{last_line}'")
-          last_line = line
-          line = ""
-          lines.delete_at(n)
-          max_lines -= 1
-          n += 1
-          next
-        end
+        # if last_line =~ /^#+\s+/ && line.empty?
+        #   log_message_screen(" #{n}   removed: empty line after heading '#{last_line}'")
+        #   last_line = line
+        #   line = ""
+        #   lines.delete_at(n)
+        #   max_lines -= 1
+        #   n += 1
+        #   next
+        # end
 
-        # save out some fields if we spot them
+        #-----------------------------------------------------------
+        # save out any already fielded metadata
         if line =~ /^\s*title[:\s]+.+/i # TODO: finish me
           line.scan(/^\s*title[:\s]+(.*)/i) { |m| title = m.join }
-          info_message_screen(" found title: #{title}")
+          info_message_screen(" #{n}: found title: #{title}")
         end
         if line =~ /^\s*date[:\s]+.+/i
           line.scan(/\s*date[:\s]+(.*)/i) { |m| doc_date = m.join }
-          info_message_screen(" found date: #{doc_date}")
+          info_message_screen(" #{n}: found date: #{doc_date}")
         end
         if line =~ /^\s*poss_date[:\s]+.+/i
           line.scan(/\s*poss_date[:\s]+(.*)/) { |m| poss_date = m.join }
-          info_message_screen(" found poss_date: #{poss_date}")
+          info_message_screen(" #{n}: found poss_date: #{poss_date}")
         end
         if line =~ /^\s*(author|by)[:\s]+.+/i # TODO: test me
           line.scan(/^\s*(?:author|by)[:\s]+(.*)/i) { |m| author = m.join }
-          info_message_screen(" found author: #{author}")
+          info_message_screen(" #{n}: found author: #{author}")
         end
         if line =~ /\[.*?\]\(.*?\/authors?\/.*?\)/i # TODO: test me
           line.scan(/\[(.*?)\]\(.*?\/authors?\/.*?\)/i) { |m| author = m.join }
-          info_message_screen(" found author: #{author}")
-        end
-        if line =~ /^\s*by[:\s]+\[.+\]/i # TODO: test me
-          line.scan(/^\s*by[:\s]+\[(.+)\]/i) { |m| author = m.join } # .join turns ['a'] to 'a'
-          info_message_screen(" found author: #{author}")
+          info_message_screen(" #{n}: found author: #{author}")
         end
         if line =~ /^\s*poss_author[:\s]+.+/i
           line.scan(/^\s*poss_author[:\s]+(.*)/i) { |m| poss_author = m.join }
-          info_message_screen(" found poss_author: #{poss_author}")
+          info_message_screen(" #{n}: found poss_author: #{poss_author}")
         end
-        if line =~ /^\s*tags?[:\s]+.+/i
+        if line =~ /^\s*tags?[:\s]+.+/i # tag: field etc.
           line.scan(/^Tags?[:\s]+\[?([^\]]+)/i) { |m| tags << m.join } # add to array, having first turned ['a'] to 'a'
-          info_message_screen(" found tags: #{tags}")
+          info_message_screen(" #{n}: found tags: #{tags}")
         end
-        if line =~ /^\s*(category|categories)[:\s]+/i
+        if line =~ /^\s*(category|categories)[:\s]+/i # category: field etc.
           line.scan(/^\s*(?:category|categories)[:\s]+\[?([^\]]+)/i) { |m| tags << m.join } # ?: stops first (...) being a capturing group
-          info_message_screen(" found tags (from category field): #{tags}")
-        end
-        if line =~ /\/category\/.*?\//i
-          line.scan(/\/category\/([^\/]+)\//i) { |m| tags << m.join }
-          info_message_screen(" found tags (from categories): #{tags}")
-        end
-        if line =~ /\/tag\/.*?\//i
-          line.scan(/\/tag\/([^\/]+)\//i) { |m| tags << m.join }
-          info_message_screen(" found tags: #{tags}")
-        end
-        if line =~ /\[Home\]\(.*\)/i # TODO: test me
-          line.scan(/\[Home\]\((.*)\)/i) { |m| site = m.join}
-          info_message_screen(" found site: #{site}")
+          info_message_screen(" #{n}: found tags (from category field): #{tags}")
         end
         if line =~ /^site:\s+.+/i # TODO: test me
           line.scan(/^site:\s+(.*)/i) { |m| site = m.join}
-          info_message_screen(" found site: #{site}")
-        end
-        if line =~ /^\[View web version\]\(.+\)/i
-          line.scan(/^\[View web version\]\((.+)\)/i) { |m| source = m.join }
-          info_message_screen(" found source: #{source}")
+          info_message_screen(" #{n}: found site: #{site}")
         end
         if line =~ /^poss_source:\s+.+/i
           line.scan(/^poss_source:\s+(.*)/i) { |m| poss_source = m.join }
-          info_message_screen(" found poss_source: #{poss_source}")
+          info_message_screen(" #{n}: found poss_source: #{poss_source}")
         end
 
-        # try just parsing line for a valid date string
-        begin
-          if poss_date.nil?
-            poss_date = Date.parse(truncate_text(line, 30))
-            info_message_screen(" found poss date: #{poss_date}")
+        #-----------------------------------------------------------
+        # save out any other metadata we can spot
+        if line =~ /^[\s*-]*(?:by|©):?\s*[^\d]{4}.*/i # 'by|@ X Y' but not @2022
+          line.scan(/^[\s*-]*(?:by|©):?\s*([^\d]{4}.*)/i) { |m| author = m.join } # .join turns ['a'] to 'a'
+          info_message_screen(" #{n}: found author: #{author}")
+        end
+        if line =~ /^\s*by[:\s]+\[.+\]/i # 'by [X Y](...)'
+          line.scan(/^\s*by[:\s]+\[(.+)\]/i) { |m| author = m.join } # .join turns ['a'] to 'a'
+          info_message_screen(" #{n}: found author: #{author}")
+        end
+        # ... blogger.com/profile ... at ...
+        if line =~ /https:\/\/www\.blogger\.com\/profile\/.*\s*at\s*.*?https:\/\/[^\)\s$]+/ 
+          line.scan(/\[([^\]]+)\].*\s*at\s*.*?(https:\/\/[^\)\s$]+)/) do |m|
+            poss_author = m[0]
+            source = m[1]
           end
+          info_message_screen(" #{n}: found poss_author: #{poss_author}")
+          info_message_screen(" #{n}: found source: #{source}")
+        end
+        # Posted by ... at ...
+        if line =~ /Posted\sby\s*.*\s*at\s*.*?(https:\/\/[^\)\s$]+)/ # 
+          line.scan(/Posted\sby\s*(.*)\s*at\s*.*?(https:\/\/[^\)\s$]+)/) do |m|
+            poss_author = m[0]
+            source = m[1]
+          end
+          info_message_screen(" #{n}: found poss_author: #{poss_author}")
+          info_message_screen(" #{n}: found source: #{source}")
+        end
+        # /category/...)    TODO: align with /label/ and /tag/ below?
+        if line =~ /\/category\/.*?\//i
+          line.scan(/\/category\/([^\/]+)\//i) { |m| tags << m.join }
+          info_message_screen(" #{n}: found tags (from category): #{tags}")
+        end
+        # /label/...)
+        if line =~ /\/label\/[^\)\/]+[\)\/]/i
+          line.scan(/\/label\/([^\)\/]+)[\)\/]/i) { |m| tags << m.join }
+          info_message_screen(" #{n}: found tags (from label): #{tags}")
+        end
+        # /tag/...)
+        if line =~ /\/tag\/[^\)\/]+[\)\/]/i
+          line.scan(/\/tag\/([^\)\/]+)[\)\/]/i) { |m| tags << m.join }
+          info_message_screen(" #{n}: found tags: #{tags}")
+        end
+        # [Home](...)
+        if line =~ /[^!]\[Home\]\(.*\)/i # TODO: test me
+          line.scan(/\[Home\]\((.*)\)/i) { |m| site = m.join}
+          info_message_screen(" #{n}: found site: #{site}")
+        end
+        # [View web version](...)
+        if line =~ /^\[View web version\]\(.+\)/i
+          line.scan(/^\[View web version\]\((.+)\)/i) { |m| source = m.join }
+          info_message_screen(" #{n}: found source: #{source}")
+        end
+        # https://www.facebook.com/sharer/sharer.php?u=...
+        if line =~ /https:\/\/www\.facebook\.com\/sharer\/sharer\.php\?u=.+\)/i
+          line.scan(/https:\/\/www\.facebook\.com\/sharer\/sharer\.php\?u=(.+)\)/i) { |m| source = m.join }
+          info_message_screen(" #{n}: found source: #{source}")
+        end
+
+        #-----------------------------------------------------------
+        # try just parsing line for a valid date string, including it's before or equal to today
+        begin
+          # if poss_date.nil?
+          trunc_text = truncate_text(line, 30)
+          if trunc_text.count('0-9') >= 3 # at least "...4.3.22..." or "4 Mar 22"
+            line_date = Date.parse(truncate_text(line, 30)).to_s
+            if line_date < $date_now
+              poss_date = line_date
+              info_message_screen(" #{n}: found poss date: #{poss_date} from '#{truncate_text(line, 30)}'")
+            end
+          end
+          # end
         rescue Date::Error => e
           # log_message_screen("didn't like that: #{e}")
         end
       end
-      # TODO: cope with this! Tags: [BBC Radio 4](https://nickbaines.wordpress.com/tag/bbc-radio-4/), [hope](https://nickbaines.wordpress.com/tag/hope/), [Jeremiah](https://nickbaines.wordpress.com/tag/jeremiah/), [Leonard Cohen](https://nickbaines.wordpress.com/tag/leonard-cohen/), [Today](https://nickbaines.wordpress.com/tag/today/), [Ukraine](https://nickbaines.wordpress.com/tag/ukraine/)
 
       last_line = line
     end
