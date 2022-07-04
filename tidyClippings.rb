@@ -1,14 +1,14 @@
 #!/usr/bin/env ruby
 #-------------------------------------------------------------------------------
 # Script to tidy and clean up HTML text clipped into markdown files
-# by Jonathan Clark, v1.3.x, 23.6.2022
+# by Jonathan Clark, v1.3.x, 4.7.2022
 # Tested with a number of files from
 # - desiringgod.org
 # - wordpress.com/mbarrettdavie
 #-------------------------------------------------------------------------------
 # TODO: sort out what to do with no H1.
 #-------------------------------------------------------------------------------
-VERSION = "1.3.5"
+VERSION = "1.3.6"
 require 'date'
 require 'cgi'
 require 'colorize'
@@ -153,6 +153,9 @@ def cleanup_line(line)
 
   # replace asterisk lists with dash lists (to stop NP thinking they are tasks)
   line.gsub!(/^(\s*)\*\s/, '\1- ')
+
+  # replace line starting ' - ####' with just heading markers
+  line.gsub!(/^\s*\-\s+####\s+/, '#### ')
 
   # trim the end of the line
   line.rstrip!
