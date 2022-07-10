@@ -5,7 +5,7 @@
 #-------------------------------------------------------------------------------
 # TODO: sort out what to do with no H1.
 #-------------------------------------------------------------------------------
-VERSION = "1.3.8"
+VERSION = "1.3.9"
 require 'date'
 require 'cgi'
 require 'colorize'
@@ -25,7 +25,7 @@ ARCHIVE_FILEPATH = "#{INPUT_FILEPATH}/tidyClippingsOriginals"
 DATE_ISO_FORMAT = '%Y-%m-%d'.freeze
 DATE_TIME_HUMAN_FORMAT = '%e %b %Y %H:%M'.freeze
 DATE_TIME_LOG_FORMAT = '%Y%m%d%H%M'.freeze # only used in logging
-IGNORE_SECTION_TITLES = ['IgnoreMe', 'New Resources', 'Menu', 'Archive', 'Meta', 'Subscribe', 'Past navigation', 'Shared', 'Share this', 'Share this post', 'How we use cookies', 'Skip to content', 'Like this', 'Leave a Reply', '_Related', 'Related Posts', 'Related Articles', 'More by this author', 'Ways to Follow', 'My recent publications', 'Other Publications', 'Publications', 'Follwers', 'Site Map', 'Solid Joys', 'Look at the Book', 'Join The Conversation', 'About Us', 'Follow Us', 'Events', 'Ministries', 'Blog Archive', 'Blogroll']
+IGNORE_SECTION_TITLES = ['IgnoreMe', 'New Resources', 'Menu', 'Archive', 'Meta', 'Subscribe', 'Past navigation', 'Shared', 'Share this', 'Share this post', 'How we use cookies', 'Skip to content', 'Like this', 'Leave a Reply', '_Related', 'Related Posts', 'Related Articles', 'More by this author', 'Ways to Follow', 'My recent publications', 'Other Publications', 'Publications', 'Follwers', 'Site Map', 'Solid Joys', 'Look at the Book', 'Join The Conversation', 'About Us', 'Follow Us', 'Events', 'Ministries', 'Blog Archive', 'Blogroll', 'Think', 'More like this', 'From Across The Blog', 'Author info', 'Authors']
 
 #-------------------------------------------------------------------------------
 # Other Constants
@@ -87,6 +87,8 @@ def truncate_text(text, max_length = 100000, use_elipsis = false)
   return text[0, max_length] + (use_elipsis ? '...' : '')
 end
 
+#-------------------------------------------------------------------------
+
 # simplify HTML and Markdown in the line we receive
 def cleanup_line(line)
   orig_line = line
@@ -142,14 +144,23 @@ def cleanup_line(line)
   line = '' if line == "[Donate](/donate)"
   line = '' if line == "Submit"
   line = '' if line == "[News & Updates](/posts)"
+  line = '' if line == "Advanced Search"
 
-  # replace a line just surrounded by **...** with an H4 instead
-  line.gsub!(/^\s*\*\*(.*)\*\*\s*$/, '#### \1')
+  # for Think Theology
+  line = '' if line == "# Think" # Not working, and I don't know why. Instead knocking out all headings which start 'Think'
+  line = '' if line == "Date from:"
+  line = '' if line == "Date to:"
+  line = '' if line =~ /\[\s*Prev article\s*\]/
+  line = '' if line =~ /\[\s*Next article\s*\]/
 
+  # for Stocki
   # replace odd things in Stocki '**_ ... _**' with simpler '_..._'
-  # (needs to come after **...** test above)
   line.gsub!(/\*\*_/, '_')
   line.gsub!(/_\*\*/, '_')
+
+  # replace a line just surrounded by **...** with an H4 instead
+  # (needs to come after **_..._** test above)
+  line.gsub!(/^\s*\*\*(.*)\*\*\s*$/, '#### \1')
 
   # replace asterisk lists with dash lists (to stop NP thinking they are tasks)
   line.gsub!(/^(\s*)\*\s/, '\1- ')
@@ -200,6 +211,9 @@ def help_identify_metadata(line)
 
   # DesiringGod.org specifics
   # line = "site: https://www.desiringgod.org/" if line =~ /\/about-us/
+
+  # typepad.com specifics
+  line = 'source: ' + line if line =~ /^https:\/\/.*\.typepad.com\/.*/
 
   # blogspot.com specifics
   line.gsub!('# ', 'site: ') if line =~ /^#\s.*\(https:\/\/.*\.blogspot\.com\// # first H1 is site title not post title
@@ -277,7 +291,7 @@ begin
       line = help_identify_metadata(line)
 
       if line != line_in
-        # log_message(" #{n}~ #{line}")
+        log_message(" #{n}~ #{line}")
         lines[n] = line
       end
 
@@ -346,7 +360,7 @@ begin
         line = ""
 
       else
-        log_message("     #{n}: #{truncate_text(line, 70, true)}") if n < 100
+        # log_message("     #{n}: #{truncate_text(line, 70, true)}") if n < 100
 
         # insert blank line before heading
         # if !last_line.empty? && line =~ /^#+\s+/
@@ -384,6 +398,8 @@ begin
         if line =~ /^\s*by[:\s]+\[.+\]/i
           line.scan(/^\s*by[:\s]+\[(.+)\]/i) { |m| author = m.join } # .join turns ['a'] to 'a'
           info_message(" #{n}: found author/2: #{author}")
+          line.scan(/^\s*by[:\s]+\[.+\]\((https:\/\/[^\/]+\/)/i) { |m| site = m.join }
+          info_message(" #{n}: found site/1: #{site}")
         end
         # ... blogger.com/profile ... at ...
         if line =~ /https:\/\/www\.blogger\.com\/profile\/.*\s*at\s*.*?https:\/\/[^\)\s$]+/ 
@@ -420,12 +436,12 @@ begin
         end
         if line =~ /https:\/\/[^\/]+\/wp-content\//
           line.scan(/(https:\/\/[^\/]+)\/wp-content\//) { |m| site = m.join }
-          info_message(" #{n}: found site/1: #{site}")
+          info_message(" #{n}: found site/2: #{site}")
         end
         # [Home](...)
         if line =~ /[^!]\[Home\]\(.*\)/i # TODO: test me
           line.scan(/\[Home\]\((.*)\)/i) { |m| site = m.join}
-          info_message(" #{n}: found site/2: #{site}")
+          info_message(" #{n}: found site/3: #{site}")
         end
         # [View web version](...)
         if line =~ /^\[View web version\]\(.+\)/i
@@ -442,6 +458,10 @@ begin
           line.scan(/\[Leave a Comment\]\(([^)]+)\/#respond\)/i) { |m| source = m.join }
           info_message(" #{n}: found source/5: #{source}")
         end
+
+        # Stocki specific
+        author = 'Steve Stockman' if line =~ /^source: https:\/\/stocki.typepad.com\//i
+
 
         #-----------------------------------------------------------
         # save any already fielded metadata
@@ -477,6 +497,10 @@ begin
         if line =~ /^site:\s+.+/i # TODO: test me
           line.scan(/^site:\s+(.*)/i) { |m| site = m.join}
           info_message(" #{n}: found site: #{site}")
+        end
+        if line =~ /^source:\s+.+/i
+          line.scan(/^source:\s+(.*)/i) { |m| source = m.join }
+          info_message(" #{n}: found source: #{source}")
         end
         if line =~ /^poss_source:\s+.+/i
           line.scan(/^poss_source:\s+(.*)/i) { |m| poss_source = m.join }
