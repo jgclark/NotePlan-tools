@@ -1,5 +1,9 @@
 # CHANGELOG
 As always, `npTools -h` to see the full list of current options.
+
+## v2.3.1, 2022-10-03
+- [Fixed] bug with improperly closed frontmatter
+
 ## v2.3.0, 2022-06-26
 - [Added] supports new Weekly notes, available with NotePlan 3.6.0.
 

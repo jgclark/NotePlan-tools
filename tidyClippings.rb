@@ -5,7 +5,7 @@
 #-------------------------------------------------------------------------------
 # TODO: sort out what to do with no H1.
 #-------------------------------------------------------------------------------
-VERSION = "1.3.9"
+VERSION = "1.3.10"
 require 'date'
 require 'cgi'
 require 'colorize'
@@ -25,7 +25,7 @@ ARCHIVE_FILEPATH = "#{INPUT_FILEPATH}/tidyClippingsOriginals"
 DATE_ISO_FORMAT = '%Y-%m-%d'.freeze
 DATE_TIME_HUMAN_FORMAT = '%e %b %Y %H:%M'.freeze
 DATE_TIME_LOG_FORMAT = '%Y%m%d%H%M'.freeze # only used in logging
-IGNORE_SECTION_TITLES = ['IgnoreMe', 'New Resources', 'Menu', 'Archive', 'Meta', 'Subscribe', 'Past navigation', 'Shared', 'Share this', 'Share this post', 'How we use cookies', 'Skip to content', 'Like this', 'Leave a Reply', '_Related', 'Related Posts', 'Related Articles', 'More by this author', 'Ways to Follow', 'My recent publications', 'Other Publications', 'Publications', 'Follwers', 'Site Map', 'Solid Joys', 'Look at the Book', 'Join The Conversation', 'About Us', 'Follow Us', 'Events', 'Ministries', 'Blog Archive', 'Blogroll', 'Think', 'More like this', 'From Across The Blog', 'Author info', 'Authors']
+IGNORE_SECTION_TITLES = ['IgnoreMe', 'Resources', 'New Resources', 'Menu', 'Primary Menu', 'Archive', 'Meta', 'Subscribe', 'Post navigation', 'Shared', 'Share this', 'Share this post', 'How we use cookies', 'Skip to content', 'Like this', 'Leave a Reply', '_Related', 'Related Posts', 'Related Articles', 'Related Resources', 'More by this author', 'Ways to Follow', 'My recent publications', 'Other Publications', 'Publications', 'Follwers', 'Site Map', 'Solid Joys', 'Look at the Book', 'Join The Conversation', 'About Us', 'Follow Us', 'Events', 'Ministries', 'Blog Archive', 'Blogroll', 'Think', 'More like this', 'From Across The Blog', 'Author info', 'Authors', 'Join the Discussion', 'Popular Articles in This Series']
 
 #-------------------------------------------------------------------------------
 # Other Constants
@@ -137,6 +137,7 @@ def cleanup_line(line)
   # Remove some lines which aren't interesting
   line = '' if line =~ /^Previous article/i || line =~ /^Next article/i
   line = '' if line =~ /^\[Share\]/i
+  line = '' if line =~ /^\##\s*\[View All\]/i # for Crossway
   line = '' if line =~ /^\\-\s*$/
   line = '' if line =~ /^\*\*Comments policy:\*\*/
   line = '' if line == "#popclipped"
@@ -180,7 +181,7 @@ end
 def help_identify_sections(line)
   orig_line = line
   # Fix headings that are missing heading markers
-  line = '#Menu' if line =~ /^# Menu/i
+  line = '# Menu' if line =~ /^#Menu/i
   line = '## Join the Conversation' if line =~ /^Join the Conversation$/i
   line = '## About Us' if line =~ /^# ABOUT US/i
   line = '## Follow Us' if line =~ /^FOLLOW US$/i
@@ -189,7 +190,10 @@ def help_identify_sections(line)
   line = '### Labels' if line =~ /^## Labels$/i
 
   # Ignore sections without heading text
-  line = '## IgnoreMe' if line =~ /^#+\s*$/
+  # v1.3.5 added this, but stops heidelblog.net working
+  # line = '## IgnoreMe' if line =~ /^#+\s*$/
+  # v1.3.10 trying simplication
+  line = '' if line =~ /^#+\s*$/
 
   # log if changed
   log_message("    his-> #{line}") if orig_line != line
@@ -230,9 +234,9 @@ def help_identify_metadata(line)
   return line
 end
 
-#=======================================================================================
+#===========================================================================
 # Main logic
-#=======================================================================================
+#===========================================================================
 
 # Setup program options
 options = OpenStruct.new
@@ -290,6 +294,10 @@ begin
       # See what we can do to help identify metadata, and change accordingly
       line = help_identify_metadata(line)
 
+      # For first line only ignore H1 which is just a blog title
+      if n == 0 && line =~ /^#\s+\[.+\]\(.+\)/
+        line.gsub!(/^#/, 'site:')
+      end
       if line != line_in
         log_message(" #{n}~ #{line}")
         lines[n] = line
@@ -332,7 +340,6 @@ begin
 
       # If a new section, should we ignore it?
       if line =~ /^#+\s+/
-        last_heading_level = this_heading_level
         this_heading_level = line.index(' ') # = how many chars before first space?
         if line =~ /#{re_ignore_sections}/i
           log_message("   #{n}: will ignore new section '#{line}'")
@@ -340,8 +347,10 @@ begin
         elsif this_heading_level <= last_heading_level
           log_message("   #{n}: new section '#{line}' #{this_heading_level} (<= #{last_heading_level}) stopping ignore")
           ignore_this_section = false
+          last_heading_level = this_heading_level
         else
           log_message("   #{n}: new section '#{line}' #{this_heading_level} (> #{last_heading_level}) : ignore_this_section = #{ignore_this_section}")
+          # last_heading_level = this_heading_level
         end
       end
 
@@ -513,7 +522,7 @@ begin
           # look for at least "...4.3.22..." or "4 Mar 22"
           # or one of the month names
           if !line.nil? && (line.count('0-9') >= 3 || line =~ /(^|\s)(Jan(uary)?|Feb(uary)?|Mar(ch)?|Apr(il)?|May|Jun(e)?|Jul(y)?|Aug(ust)?|Sep(tember)?|Oct(ober)?|Nov(ember)?|Dec(ember)?)\s/)
-            trunc_text = truncate_text(line, 125) # function's limit is 128, but it seems to need fewer than that
+            trunc_text = truncate_text(line, 122, false) # function's limit is 128, but it seems to need fewer than that
             line_date = Date.parse(trunc_text).to_s
             # only keep if it's before or equal to today
             if line_date < $date_now
