@@ -1,6 +1,9 @@
 # CHANGELOG
 As always, `npTools -h` to see the full list of current options.
 
+## v2.4.0, 2022-12-31
+- [Added] function to remove `@done(...)` markers from completed checklist items (introduced in NotePlan 3.8). This is triggered by new command line option `-r`.
+
 ## v2.3.1, 2022-10-03
 - [Fixed] bug with improperly closed frontmatter
 

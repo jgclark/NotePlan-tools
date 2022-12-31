@@ -1,12 +1,12 @@
 #!/usr/bin/env ruby
 #-------------------------------------------------------------------------------
 # NotePlan Tools script
-# by Jonathan Clark, v2.3.1, 3.10.2022
+# by Jonathan Clark, v2.4.0, 31.12.2022
 #-------------------------------------------------------------------------------
 # See README.md file for details, how to run and configure it.
 # Repository: https://github.com/jgclark/NotePlan-tools/
 #-------------------------------------------------------------------------------
-VERSION = "2.3.1"
+VERSION = "2.4.0"
 
 require 'date'
 require 'time'
@@ -48,7 +48,8 @@ NP_CALENDAR_DIR = "#{np_base_dir}/Calendar".freeze
 # Regex definitions (where they're likely to be re-used). NB need to be single quoted.
 #-------------------------------------------------------------------------------
 RE_DATE = '\d{4}[\-\.//][01]?\d[\-\.//]\d{1,2}' # built-in format for finding dates of form YYYY-MM-DD and similar
-RE_DATE_TIME = RE_DATE + '\s\d{2}:\d{2}(?:.(?:AM|PM))?' # YYYY-MM-DD HH:MM[AM|PM]
+RE_TIME = '\d{2}:\d{2}(?:.(?:AM|PM))?' # YYYY-MM-DD HH:MM[AM|PM]
+RE_DATE_TIME = RE_DATE + '\s' + RE_TIME
 RE_DATE_FORMAT_CUSTOM = '\d{1,2}[\-\.//][01]?\d[\-\.//]\d{4}'.freeze # regular expression of alternative format used to find dates in templates. This matches DD.MM.YYYY and similar.
 RE_DUE_DATE = '>' + RE_DATE # find '>2021-02-23' etc.
 RE_DUE_DATE_CAPTURE = '>(' + RE_DATE + ')' # find ' >2021-02-23' and return just date part
@@ -57,7 +58,8 @@ RE_DATE_INTERVAL = '[+\-]?\d+[bdwm]'
 RE_DATE_INTERVAL_CAPTURE = '(' + RE_DATE_INTERVAL + ')'
 RE_NOTE_LINK = '\[\[[^\#\]]+(\#[^\]]+)?\]\]' # find '[[note title]]' with optional #heading (not greedy)
 RE_NOTE_LINK_CAPTURE = '\[\[([^\#\]]+(\#[^\]]+)?)\]\]' # find '[[note title]]' (not greedy)
-RE_DONE_DATE_TIME = '@done\(' + RE_DATE_TIME + '\)' # find '@done(YYYY-MM-DD HH:mm)'
+RE_DONE_DATE_TIME = '@done\(' + RE_DATE_TIME + '\)' # find '@done(YYYY-MM-DD HH:mm)' markers
+RE_DONE_DATE_OPT_TIME = '@done\(' + RE_DATE + '(\s'+RE_TIME+')?\)' # find '@done(YYYY-MM-DD HH:mm)' markers (with optional time)
 
 # Test RE_NOTE_LINK
 # puts 'invalid [[]] link' =~ /#{RE_NOTE_LINK}/
@@ -656,6 +658,26 @@ class NPFile
     insert_new_line_at_line(section_heading, n) unless found_section # if section not yet found then add it before this line
   end
 
+  def remove_checklist_done_markers
+    # removes @done(...) markers in done checklist items
+    log_verbose_message('  remove_finished_tags_dates ...')
+    n = cleaned = 0
+    while n < @line_count
+      # only do something if this is a completed or cancelled task
+      if @lines[n] =~ /\s*\+\s+\[(x|-)\]/
+        if @lines[n] =~ /\s#{RE_DONE_DATE_OPT_TIME}/
+          @lines[n].gsub!(/\s#{RE_DONE_DATE_OPT_TIME}/, '')
+          cleaned += 1
+        end
+      end
+      n += 1
+    end
+    return unless cleaned.positive?
+
+    @is_updated = true
+    log_message("  - removed #{cleaned} @done() marker(s) from checklist item(s)")
+  end
+
   def remove_finished_tags_dates
     # removes specific tags and >dates from complete or cancelled tasks
     log_verbose_message('  remove_finished_tags_dates ...')
@@ -1115,56 +1137,59 @@ class NPFile
 
       # Try matching for the standard YYYY-MM-DD date pattern
       # (though check it's not got various characters before it, to defeat common usage in middle of things like URLs)
-      line.scan(/[^\d(<>\/-](#{RE_DATE})/) { |m| date_string = m.join }
-      if date_string != ''
-        # We have a date string to use for any offsets in the following section
-        current_target_date = date_string
-        log_verbose_message("    - Found CTD #{current_target_date}")
-      else
-        # Try matching for the custom date pattern, configured at the top
-        # (though check it's not got various characters before it, to defeat common usage in middle of things like URLs)
-        line.scan(/[^\d(<>\/-](#{RE_DATE_FORMAT_CUSTOM})/) { |m| date_string = m.join }
+      unless line != ''
+        line.scan(/[^\d(<>\/-](#{RE_DATE})/) { |m| date_string = m.join }
+        
         if date_string != ''
           # We have a date string to use for any offsets in the following section
           current_target_date = date_string
           log_verbose_message("    - Found CTD #{current_target_date}")
+        else
+          # Try matching for the custom date pattern, configured at the top
+          # (though check it's not got various characters before it, to defeat common usage in middle of things like URLs)
+          line.scan(/[^\d(<>\/-](#{RE_DATE_FORMAT_CUSTOM})/) { |m| date_string = m.join }
+          if date_string != ''
+            # We have a date string to use for any offsets in the following section
+            current_target_date = date_string
+            log_verbose_message("    - Found CTD #{current_target_date}")
+          end
         end
-      end
-      if line =~ /#template/
-        # We have a #template tag so ignore any offsets in the following section
-        last_was_template = true
-        log_verbose_message("    . Found #template in '#{line.chomp}'")
-      end
+        if line =~ /#template/
+          # We have a #template tag so ignore any offsets in the following section
+          last_was_template = true
+          log_verbose_message("    . Found #template in '#{line.chomp}'")
+        end
 
-      # ignore line if we're in a template section (last_was_template is true)
-      unless last_was_template
-        # find lines with {+3d} or {-4w} etc. plus {0d} special case
-        # NB: this only deals with the first on any line; it doesn't make sense to have more than one.
-        date_offset_string = ''
-        if line =~ /\{#{RE_DATE_INTERVAL}\}/
-          log_verbose_message("    - Found line '#{line.chomp}'")
-          line.scan(/\{(#{RE_DATE_INTERVAL_CAPTURE})\}/) { |m| date_offset_string = m.join }
-          # FIXME: line above seems to be returning '-18d-18d' for example. Though the code still works OK as calc_offset_date happens to parse it OK
-          if date_offset_string != ''
-            log_verbose_message("      - Found DOS #{date_offset_string} and last_was_template=#{last_was_template}")
-            if current_target_date != ''
-              begin
-                calc_date = calc_offset_date(Date.parse(current_target_date), date_offset_string)
-              rescue StandardError => e
-                error_message("      Error #{e.exception.message} while parsing date '#{current_target_date}' for #{date_offset_string}")
+        # ignore line if we're in a template section (last_was_template is true)
+        unless last_was_template
+          # find lines with {+3d} or {-4w} etc. plus {0d} special case
+          # NB: this only deals with the first on any line; it doesn't make sense to have more than one.
+          date_offset_string = ''
+          if line =~ /\{#{RE_DATE_INTERVAL}\}/
+            log_verbose_message("    - Found line '#{line.chomp}'")
+            line.scan(/\{(#{RE_DATE_INTERVAL_CAPTURE})\}/) { |m| date_offset_string = m.join }
+            # FIXME: line above seems to be returning '-18d-18d' for example. Though the code still works OK as calc_offset_date happens to parse it OK
+            if date_offset_string != ''
+              log_verbose_message("      - Found DOS #{date_offset_string} and last_was_template=#{last_was_template}")
+              if current_target_date != ''
+                begin
+                  calc_date = calc_offset_date(Date.parse(current_target_date), date_offset_string)
+                rescue StandardError => e
+                  error_message("      Error #{e.exception.message} while parsing date '#{current_target_date}' for #{date_offset_string}")
+                end
+                # Remove the offset text (e.g. {-3d}) by finding string points
+                label_start = line.index('{')
+                label_end = line.index('}')
+                # Create new version with inserted date
+                line = "#{line[0..label_start - 1]}>#{calc_date}#{line[label_end + 1..-2]}" # also chomp off last character (newline)
+                # then add the new date
+                # line += ">#{calc_date}"
+                @lines[n] = line
+                log_verbose_message("      - In line labels runs #{label_start}-#{label_end} --> '#{line.chomp}'")
+                @is_updated = true
+              elsif $verbose > 0
+                error_message("    Warning: have an offset date, but no current_target_date before line '#{line.chomp}'")
               end
-              # Remove the offset text (e.g. {-3d}) by finding string points
-              label_start = line.index('{')
-              label_end = line.index('}')
-              # Create new version with inserted date
-              line = "#{line[0..label_start - 1]}>#{calc_date}#{line[label_end + 1..-2]}" # also chomp off last character (newline)
-              # then add the new date
-              # line += ">#{calc_date}"
-              @lines[n] = line
-              log_verbose_message("      - In line labels runs #{label_start}-#{label_end} --> '#{line.chomp}'")
-              @is_updated = true
-            elsif $verbose > 0
-              error_message("    Warning: have an offset date, but no current_target_date before line '#{line.chomp}'")
             end
           end
         end
@@ -1342,6 +1367,7 @@ options.archive = false # default off at the moment as feature isn't complete
 options.move_daily_to_note = false # default off now we have the next option
 options.move_daily_to_note_when_complete = false
 options.move_on_dailies = false
+options.remove_checklist_done_markers = false
 options.remove_rescheduled = true
 options.skipfile = ''
 options.skiptoday = false
@@ -1379,6 +1405,9 @@ opt_parser = OptionParser.new do |opts|
   end
   opts.on('-q', '--quiet', 'Suppress all output, apart from error messages. Overrides -v or -w.') do
     options.quiet = true
+  end
+  opts.on('-r', '--removechecklistdonemarkers', 'Remove @done() markers from checklist items') do
+    options.remove_checklist_done_markers = true
   end
   opts.on('-s', '--keepscheduled', 'Keep the re-scheduled (>) dates of completed tasks') do
     options.remove_rescheduled = false
@@ -1515,6 +1544,7 @@ if $notes.count.positive? # if we have some files to work on ...
     # note.remove_empty_heading_sections
     note.move_daily_ref_to_notes(options.move_daily_to_note_when_complete) if note.is_calendar && (options.move_daily_to_note || options.move_daily_to_note_when_complete)
     note.remove_finished_tags_dates
+    note.remove_checklist_done_markers if options.remove_checklist_done_markers
     note.remove_rescheduled if note.is_calendar
     note.process_repeats_and_done
     note.remove_multiple_empty_lines

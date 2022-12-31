@@ -10,11 +10,12 @@ Each time the script runs, it does a number of things, explained in each section
 
 It **tidies up** data files, by:
 1. removing the time part of any `@done(...)` mentions that NotePlan automatically adds when the 'Append Completion Date' option is on.
-2. removing `#waiting` or `#high` tags or `<dates` from completed or cancelled tasks (configurable)
-3. removing scheduled (`* [>] task`) items in calendar files (as they've been copied to a new day)
-4. removing any lines with just `* `or `-` or starting `#`s
-5. removing header lines without any content before the next header line of the same or higher level (i.e. fewer `#`s)
-6. removing any multiple consecutive blank lines.
+2. removing any `@done(...)` mentions on completed Checklist items that NotePlan automatically adds when the 'Append Completion Date' option is on. (From NP v3.8)
+3. removing `#waiting` or `#high` tags or `<dates` from completed or cancelled tasks (configurable)
+4. removing scheduled (`* [>] task`) items in calendar files (as they've been copied to a new day)
+5. removing any lines with just `* `or `-` or starting `#`s
+6. removing header lines without any content before the next header line of the same or higher level (i.e. fewer `#`s)
+7. removing any multiple consecutive blank lines.
 
 ### Moves Daily (Calendar) note items
 (From v1.9.2) The script can now move any Daily note entries with a **`>date`** in it to the mentioned Daily note. To do so requires turning on through the `-m` option.
