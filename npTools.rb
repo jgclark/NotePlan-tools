@@ -1,12 +1,12 @@
 #!/usr/bin/env ruby
 #-------------------------------------------------------------------------------
 # NotePlan Tools script
-# by Jonathan Clark, v2.4.0, 31.12.2022
+# by Jonathan Clark, v2.4.1, 26.1.2023
 #-------------------------------------------------------------------------------
 # See README.md file for details, how to run and configure it.
 # Repository: https://github.com/jgclark/NotePlan-tools/
 #-------------------------------------------------------------------------------
-VERSION = "2.4.0"
+VERSION = "2.4.1"
 
 require 'date'
 require 'time'
@@ -60,6 +60,7 @@ RE_NOTE_LINK = '\[\[[^\#\]]+(\#[^\]]+)?\]\]' # find '[[note title]]' with option
 RE_NOTE_LINK_CAPTURE = '\[\[([^\#\]]+(\#[^\]]+)?)\]\]' # find '[[note title]]' (not greedy)
 RE_DONE_DATE_TIME = '@done\(' + RE_DATE_TIME + '\)' # find '@done(YYYY-MM-DD HH:mm)' markers
 RE_DONE_DATE_OPT_TIME = '@done\(' + RE_DATE + '(\s'+RE_TIME+')?\)' # find '@done(YYYY-MM-DD HH:mm)' markers (with optional time)
+RE_DONE_TASK_OR_CHECKLIST = '^\h*[\*\-\+]\s\[x\]\s'
 
 # Test RE_NOTE_LINK
 # puts 'invalid [[]] link' =~ /#{RE_NOTE_LINK}/
@@ -840,7 +841,7 @@ class NPFile
   def move_daily_ref_to_notes(move_only_on_complete)
     # Move items in daily note with a [[note]] link to that note, inserting after Title,
     # or after the Heading if supplied in [[note#heading]].
-    # If move_only_on_complete is true, then only works if its a newly completed task.
+    # If move_only_on_complete is true, then only works if its a newly completed task/checklist.
     # Checks whether the note exists and if not, creates one first at top level.
     # TODO: should also check whether link is actually a date, and then do nothing.
     # NB: only does something with first [[note]] in a line
@@ -859,9 +860,8 @@ class NPFile
         next
       end
 
-      # if move_only_on_complete is set, then only proceed if this is a newly-
-      # completed task
-      if move_only_on_complete && line !~ /#{RE_DONE_DATE_TIME}/
+      # if move_only_on_complete is set, then only proceed if this is a completed task or checklist item
+      if move_only_on_complete && line !~ /#{RE_DONE_TASK_OR_CHECKLIST}/
         # this line doesn't match, so break out of loop and go to look at next line
         log_message("  - skipping note link in incomplete task '#{line.chomp}'")
         n += 1
@@ -1400,9 +1400,6 @@ opt_parser = OptionParser.new do |opts|
           "This is triggered whether or not the task is complete.") do
     options.move_daily_to_note = true
   end
-  opts.on('-t', '--movecomplete', "Move Daily items with [[Note#Heading]] reference to that Note on completion") do
-    options.move_daily_to_note_when_complete = true
-  end
   opts.on('-q', '--quiet', 'Suppress all output, apart from error messages. Overrides -v or -w.') do
     options.quiet = true
   end
@@ -1411,6 +1408,9 @@ opt_parser = OptionParser.new do |opts|
   end
   opts.on('-s', '--keepscheduled', 'Keep the re-scheduled (>) dates of completed tasks') do
     options.remove_rescheduled = false
+  end
+  opts.on('-t', '--movecomplete', "Move Daily items with [[Note#Heading]] reference to that Note on completion") do
+    options.move_daily_to_note_when_complete = true
   end
   opts.on('-v', '--verbose', 'Show information as I work') do
     options.verbose = 1
