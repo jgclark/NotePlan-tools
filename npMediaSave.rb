@@ -1,11 +1,13 @@
 #!/usr/bin/env ruby
 #-------------------------------------------------------------------------------
 # Script to Save some Media notes into NotePlan
-# by Jonathan Clark, v0.3.3, 20.3.2021
+# by Jonathan Clark
 #
-# v0.3 now copes with multi-line tweets
+# v0.3.4, 27.5.2023 - deals with date parsing errors in Instapaper, and multi-line titles in Instapaper
+# v0.3.3, 20.3.2021 - ?
+# v0.3.0, ? - now copes with multi-line tweets
 #-------------------------------------------------------------------------------
-VERSION = "0.3.3"
+VERSION = "0.3.4"
 require 'date'
 require 'cgi'
 require 'colorize'
@@ -26,6 +28,7 @@ YOUTUBE_LIKES_FILE = "YouTube liked videos.txt"
 YOUTUBE_UPLOAD_FILE = "YouTube upload.txt"
 DATE_TIME_LOG_FORMAT = '%e %b %Y %H:%M'.freeze # only used in logging
 DATE_TIME_APPEND_FORMAT = '%Y%m%d%H%M'.freeze
+DATE_YYYYMMDD_FORMAT = '%Y%m%d'.freeze
 
 #-------------------------------------------------------------------------------
 # To use test data instead of live data, uncomment relevant definitions.
@@ -73,27 +76,36 @@ String.disable_colorization true if tty_code == 'not a tty'
 time_now = Time.now
 $date_time_now_log_fmttd = time_now.strftime(DATE_TIME_LOG_FORMAT)
 $date_time_now_file_fmttd = time_now.strftime(DATE_TIME_APPEND_FORMAT)
+$date_now = time_now.strftime(DATE_YYYYMMDD_FORMAT)
 $verbose = false
 $npfile_count = 0
-
 
 #-------------------------------------------------------------------------
 # Helper Functions
 #-------------------------------------------------------------------------
-def main_message_screen(message)
+def main_message(message)
   puts message.colorize(CompletedColour)
 end
 
-def warning_message_screen(message)
+def warning_message(message)
   puts message.colorize(InfoColour)
 end
 
-def error_message_screen(message)
+def error_message(message)
   puts message.colorize(ErrorColour)
 end
 
-def log_message_screen(message)
+def log_message(message)
   puts message if $verbose
+end
+
+def truncate_text(text, max_length = 100000, use_elipsis = false)
+  raise ArgumentError, "max_length must be positive" unless max_length.positive?
+  return '' if text.nil?
+
+  return text if text.size <= max_length
+
+  return text[0, max_length] + (use_elipsis ? '...' : '')
 end
 
 #-------------------------------------------------------------------------
@@ -116,7 +128,7 @@ class NPCalFile
     @is_updated = false
 
     begin
-      log_message_screen(" Reading NPCalFile for '#{@title}'")
+      log_message(" Reading NPCalFile for '#{@title}'")
 
       # Open file and read in all lines (finding any Done and Cancelled headers)
       # NB: needs the encoding line when run from launchctl, otherwise you get US-ASCII invalid byte errors (basically the 'locale' settings are different)
@@ -128,9 +140,9 @@ class NPCalFile
       end
       f.close
       @line_count = @lines.size # e.g. for lines 0-2 size => 3
-      log_message_screen(" -> Read NPCalFile for '#{@title}' using id #{@id}. #{@line_count} lines")
+      log_message(" -> Read NPCalFile for '#{@title}' using id #{@id}. #{@line_count} lines")
     rescue StandardError => e
-      error_message_screen("ERROR: #{e.exception.message} when re-writing note file #{@filename}")
+      error_message("ERROR: #{e.exception.message} when re-writing note file #{@filename}")
     end
   end
 
@@ -139,7 +151,7 @@ class NPCalFile
     # NB: this is insertion at the line number, so that current line gets moved to be one later
     n = @line_count # start iterating from the end of the array
     line_number = n if line_number >= n # don't go beyond current size of @lines
-    log_message_screen("  insert_new_line at #{line_number} (count=#{n}) ...")
+    log_message("  insert_new_line at #{line_number} (count=#{n}) ...")
     @lines.insert(line_number, new_line)
     @line_count = @lines.size
   end
@@ -147,7 +159,7 @@ class NPCalFile
   def append_line_to_section(new_line, section_heading)
     # Append new_line after 'section_heading' line.
     # If not found, then add 'section_heading' to the end first
-    log_message_screen("  append_line_to_section for '#{section_heading}' ...")
+    log_message("  append_line_to_section for '#{section_heading}' ...")
     n = 0
     added = false
     found_section = false
@@ -162,14 +174,14 @@ class NPCalFile
       found_section = true if line =~ /^#{section_heading}/
       n += 1
     end
-    # log_message_screen("  section heading not found, so adding at line #{n}, #{@line_count}")
+    # log_message("  section heading not found, so adding at line #{n}, #{@line_count}")
     insert_new_line(section_heading, n) unless found_section # if section not yet found then add it before this line
     insert_new_line(new_line, n + 1) unless added # if not added so far, then now append
   end
 
   def rewrite_cal_file
     # write out this updated calendar file
-    main_message_screen("  > writing updated version of #{@filename}")
+    main_message("  > writing updated version of #{@filename}")
     # open file and write all the lines out
     begin
       File.open(@filename, 'w') do |f|
@@ -178,7 +190,7 @@ class NPCalFile
         end
       end
     rescue StandardError => e
-      error_message_screen("ERROR: #{e.exception.message} when re-writing calendar file #{filepath}")
+      error_message("ERROR: #{e.exception.message} when re-writing calendar file #{filepath}")
     end
   end
 end
@@ -188,19 +200,20 @@ end
 #--------------------------------------------------------------------------------------
 def process_spotify
   spotify_filepath = IFTTT_FILEPATH + SPOTIFY_FILE
+  log_message("Starting to process Spotify file #{spotify_filepath}")
   catch (:done) do  # provide a clean way out of this
     if defined?($spotify_test_data)
       f = $spotify_test_data
-      log_message_screen("Using Spotify test data")
+      log_message("Using Spotify test data")
     elsif File.exist?(spotify_filepath)
       if File.empty?(spotify_filepath)
-        warning_message_screen("Spotify file empty")
+        warning_message("Spotify file empty")
         throw :done
       else
         f = File.open(spotify_filepath, 'r', encoding: 'utf-8')
       end
     else
-      warning_message_screen("No Spotify file found")
+      warning_message("No Spotify file found")
       throw :done
     end
 
@@ -208,14 +221,21 @@ def process_spotify
       f.each_line do |line|
         # Parse each line
         parts = line.split('|')
-        log_message_screen(parts)
+
         # parse the given date-time string, then create YYYYMMDD version of it
-        date_YYYYMMDD = Date.parse(parts[0]).strftime('%Y%m%d')
-        log_message_screen("  Found item to save with date #{date_YYYYMMDD}:")
+        begin
+          trunc_first_field = truncate_text(parts[0], 122, false) # function's limit is 128, but it seems to need fewer than that
+          date_YYYYMMDD = Date.parse(trunc_first_field).strftime(DATE_YYYYMMDD_FORMAT)
+          log_message("  Found item to save with date #{date_YYYYMMDD}:")
+        rescue Date::Error => e
+          warning_message("couldn't parse date in: #{trunc_first_field}. Will default to today instead.")
+          date_YYYYMMDD = $date_now
+        end
+        log_message("  Found item to save with date #{date_YYYYMMDD}:")
 
         # Format line to add
         line_to_add = "- new #spotify fave **#{parts[1].strip}**'s [#{parts[2].strip}](#{parts[4].strip}) from album **#{parts[3].strip}** ![album art](#{parts[5].strip})"
-        log_message_screen(line_to_add)
+        log_message(line_to_add)
 
         # Read in the NP Calendar file for this date
         this_note = NPCalFile.new(date_YYYYMMDD)
@@ -223,7 +243,7 @@ def process_spotify
         # Add new lines to end of file, creating a ### Media section before it if it doesn't exist
         this_note.append_line_to_section(line_to_add, MEDIA_STRING)
         this_note.rewrite_cal_file
-        main_message_screen("-> Saved new Spotify fave to #{date_YYYYMMDD}")
+        main_message("-> Saved new Spotify fave to #{date_YYYYMMDD}")
       end
 
       unless defined?($spotify_test_data)
@@ -233,7 +253,7 @@ def process_spotify
         File.rename(spotify_filepath, archive_filename)
       end
     rescue StandardError => e
-      error_message_screen("ERROR: #{e.exception.message} for file #{SPOTIFY_FILE}")
+      error_message("ERROR: #{e.exception.message} for file #{SPOTIFY_FILE}")
     end
   end
 end
@@ -243,36 +263,60 @@ end
 #--------------------------------------------------------------------------------------
 def process_instapaper
   instapaper_filepath = IFTTT_FILEPATH + INSTAPAPER_FILE
+  log_message("Starting to process Instapaper file #{instapaper_filepath}")
   catch (:done) do  # provide a clean way out of this
     if defined?($instapaper_test_data)
       f = $instapaper_test_data
-      log_message_screen("Using Instapaper test data")
+      log_message("Using Instapaper test data")
     elsif File.exist?(instapaper_filepath)
       if File.empty?(instapaper_filepath)
-        warning_message_screen("Note: Instapaper file empty")
+        warning_message("Note: Instapaper file empty")
         throw :done
       else
         f = File.open(instapaper_filepath, 'r', encoding: 'utf-8')
       end
     else
-      warning_message_screen("No Instapaper file found")
+      warning_message("No Instapaper file found")
       throw :done
     end
 
     begin
+      needs_concatenating = false
+      previous_line = ''
       f.each_line do |line|
-        # Parse each line
+        # Cope with items over several lines: concatenate with next line
+        if needs_concatenating
+          line = previous_line + line
+          log_message("  Concatenated -> '#{line}' with next")
+          needs_concatenating = false
+        end
+
+        # Parse each line, splitting on \ delimiters
         parts = line.split(" \\ ")
-        # log_message_screen("  #{line} --> #{parts}")
+        # If we have less than 4 parts we'll need to join this into the next line
+        if parts.size < 4
+          needs_concatenating = true
+          previous_line = line.strip # remove whitespace (including the probable newline on the end)
+          log_message("  Need to concatenate '#{line}' with next")
+          next
+        end
+        log_message("  #{line} --> #{parts}")
+
         # parse the given date-time string, then create YYYYMMDD version of it
-        date_YYYYMMDD = Date.parse(parts[0]).strftime('%Y%m%d')
-        log_message_screen("  Found item to save with date #{date_YYYYMMDD}:")
+        begin
+          trunc_first_field = truncate_text(parts[0], 122, false) # function's limit is 128, but it seems to need fewer than that
+          date_YYYYMMDD = Date.parse(trunc_first_field).strftime(DATE_YYYYMMDD_FORMAT)
+          log_message("  Found item to save with date #{date_YYYYMMDD}:")
+        rescue Date::Error => e
+          warning_message("couldn't parse date in: #{trunc_first_field}. Will default to today instead.")
+          date_YYYYMMDD = $date_now
+        end
 
         # Format line to add. Guard against possible empty fields
         parts[2] = '' if parts[2].nil?
         parts[3] = '' if parts[3].nil?
         line_to_add = "- #article **[#{parts[1].strip}](#{parts[2].strip})** #{parts[3].strip}"
-        log_message_screen(line_to_add)
+        log_message(line_to_add)
 
         # Read in the NP Calendar file for this date
         this_note = NPCalFile.new(date_YYYYMMDD)
@@ -280,7 +324,7 @@ def process_instapaper
         # Add new lines to end of file, creating a ### Media section before it if it doesn't exist
         this_note.append_line_to_section(line_to_add, MEDIA_STRING)
         this_note.rewrite_cal_file
-        main_message_screen("-> Saved new Instapaper item to #{date_YYYYMMDD}")
+        main_message("-> Saved new Instapaper item to #{date_YYYYMMDD}")
       end
 
       unless defined?($instapaper_test_data)
@@ -290,7 +334,7 @@ def process_instapaper
         File.rename(instapaper_filepath, archive_filename)
       end
     rescue StandardError => e
-      error_message_screen("ERROR: #{e.exception.message} when processing file #{INSTAPAPER_FILE}")
+      error_message("ERROR: #{e.exception.message} when processing file #{INSTAPAPER_FILE}")
     end
   end
 end
@@ -300,19 +344,20 @@ end
 #--------------------------------------------------------------------------------------
 def process_medium
   medium_filepath = IFTTT_FILEPATH + MEDIUM_FILE
+  log_message("Starting to process Medium file #{medium_filepath}")
   catch (:done) do  # provide a clean way out of this
     if defined?($medium_test_data)
       f = $medium_test_data
-      log_message_screen("Using Medium test data")
+      log_message("Using Medium test data")
     elsif File.exist?(medium_filepath)
       if File.empty?(medium_filepath)
-        warning_message_screen("Note: Medium file empty")
+        warning_message("Note: Medium file empty")
         throw :done
       else
         f = File.open(medium_filepath, 'r', encoding: 'utf-8')
       end
     else
-      warning_message_screen("No Medium file found")
+      warning_message("No Medium file found")
       throw :done
     end
 
@@ -320,15 +365,15 @@ def process_medium
       f.each_line do |line|
         # Parse each line
         parts = line.split(" \\ ")
-        # log_message_screen("  #{line} --> #{parts}")
+        # log_message("  #{line} --> #{parts}")
         # parse the given date-time string, then create YYYYMMDD version of it
         date_YYYYMMDD = Date.parse(parts[0]).strftime('%Y%m%d')
-        log_message_screen("  Found item to save with date #{date_YYYYMMDD}:")
+        log_message("  Found item to save with date #{date_YYYYMMDD}:")
 
         # Format line to add. Guard against possible empty fields
         parts[2] = '' if parts[2].nil?
         line_to_add = "- #article **[#{parts[1].strip}](#{parts[2].strip})**"
-        log_message_screen(line_to_add)
+        log_message(line_to_add)
 
         # Read in the NP Calendar file for this date
         this_note = NPCalFile.new(date_YYYYMMDD)
@@ -336,7 +381,7 @@ def process_medium
         # Add new lines to end of file, creating a ### Media section before it if it doesn't exist
         this_note.append_line_to_section(line_to_add, MEDIA_STRING)
         this_note.rewrite_cal_file
-        main_message_screen("-> Saved new Medium item to #{date_YYYYMMDD}")
+        main_message("-> Saved new Medium item to #{date_YYYYMMDD}")
       end
 
       unless defined?($medium_test_data)
@@ -346,7 +391,7 @@ def process_medium
         File.rename(medium_filepath, archive_filename)
       end
     rescue StandardError => e
-      error_message_screen("ERROR: #{e.exception.message} when processing file #{MEDIUM_FILE}")
+      error_message("ERROR: #{e.exception.message} when processing file #{MEDIUM_FILE}")
     end
   end
 end
@@ -356,19 +401,20 @@ end
 #--------------------------------------------------------------------------------------
 def process_twitter
   twitter_filepath = IFTTT_FILEPATH + TWITTER_FILE
+  log_message("Starting to process twitter file #{twitter_filepath}")
   catch (:done) do  # provide a clean way out of this
     if defined?($twitter_test_data)
       f = $twitter_test_data
-      log_message_screen("Using Twitter test data")
+      log_message("Using Twitter test data")
     elsif File.exist?(twitter_filepath)
       if File.empty?(twitter_filepath)
-        warning_message_screen("Note: Twitter file empty")
+        warning_message("Note: Twitter file empty")
         throw :done
       else
         f = File.open(twitter_filepath, 'r', encoding: 'utf-8')
       end
     else
-      warning_message_screen("No Twitter file found")
+      warning_message("No Twitter file found")
       throw :done
     end
 
@@ -379,7 +425,7 @@ def process_twitter
         # Cope with tweets over several lines: concatenate with next line
         if needs_concatenating
           line = previous_line + line
-          log_message_screen("  Concatenated -> '#{line}' with next")
+          log_message("  Concatenated -> '#{line}' with next")
           needs_concatenating = false
         end
         # Parse each line
@@ -388,18 +434,24 @@ def process_twitter
         if parts.size < 4
           needs_concatenating = true
           previous_line = line.strip # remove whitespace (including the probable newline on the end)
-          log_message_screen("  Need to concatenate '#{line}' with next")
+          log_message("  Need to concatenate '#{line}' with next")
           next
         end
-        # log_message_screen("  #{line} --> #{parts}")
-        # parse the given date-time string, then create YYYYMMDD version of it
-        date_YYYYMMDD = Date.parse(parts[0]).strftime('%Y%m%d')
+        # log_message("  #{line} --> #{parts}")
 
-        log_message_screen("  Found item to save with date #{date_YYYYMMDD}:")
+        # parse the given date-time string, then create YYYYMMDD version of it
+        begin
+          trunc_first_field = truncate_text(parts[0], 122, false) # function's limit is 128, but it seems to need fewer than that
+          date_YYYYMMDD = Date.parse(trunc_first_field).strftime(DATE_YYYYMMDD_FORMAT)
+          log_message("  Found item to save with date #{date_YYYYMMDD}:")
+        rescue Date::Error => e
+          warning_message("couldn't parse date in: #{trunc_first_field}. Will default to today instead.")
+          date_YYYYMMDD = $date_now
+        end
 
         # Format line to add
         line_to_add = "- @#{parts[2].strip} tweet: \"#{parts[1].strip}\" ([permalink](#{parts[3].strip}))"
-        log_message_screen(line_to_add)
+        log_message(line_to_add)
 
         # Read in the NP Calendar file for this date
         this_note = NPCalFile.new(date_YYYYMMDD)
@@ -407,7 +459,7 @@ def process_twitter
         # Add new lines to end of file, creating a ### Media section before it if it doesn't exist
         this_note.append_line_to_section(line_to_add, MEDIA_STRING)
         this_note.rewrite_cal_file
-        main_message_screen("-> Saved new Twitter item to #{date_YYYYMMDD}")
+        main_message("-> Saved new Twitter item to #{date_YYYYMMDD}")
         needs_concatenating = false
         previous_line = ''
       end
@@ -419,7 +471,7 @@ def process_twitter
         File.rename(twitter_filepath, archive_filename)
       end
     rescue StandardError => e
-      error_message_screen("ERROR: #{e.exception.message} when processing file #{TWITTER_FILE}")
+      error_message("ERROR: #{e.exception.message} when processing file #{TWITTER_FILE}")
     end
   end
 end
@@ -460,7 +512,7 @@ opt_parser = OptionParser.new do |opts|
 end
 opt_parser.parse! # parse out options, leaving file patterns to process
 
-log_message_screen("\nStarting npMediaSave at #{$date_time_now_log_fmttd}")
+log_message("\nStarting npMediaSave v#{VERSION} at #{$date_time_now_log_fmttd}")
 process_instapaper if options[:instapaper]
 process_medium if options[:medium]
 process_spotify if options[:spotify]
