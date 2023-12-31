@@ -3,11 +3,13 @@
 # Script to Save some Media notes into NotePlan
 # by Jonathan Clark
 #
+# TODO: Change YouTube processing to be fed from Zapier
+# v0.4.0, 30.12.2023 - switch Spotify to be fed by Make not IFTTT
 # v0.3.4, 27.5.2023 - deals with date parsing errors in Instapaper, and multi-line titles in Instapaper
 # v0.3.3, 20.3.2021 - ?
 # v0.3.0, ? - now copes with multi-line tweets
 #-------------------------------------------------------------------------------
-VERSION = "0.3.4"
+VERSION = "0.4.0"
 require 'date'
 require 'cgi'
 require 'colorize'
@@ -16,13 +18,15 @@ require 'optparse' # more details at https://docs.ruby-lang.org/en/2.1.0/OptionP
 #-------------------------------------------------------------------------------
 # Setting variables to tweak
 #-------------------------------------------------------------------------------
-MEDIA_STRING = '### Media' # the title of the section heading to add these notes to
+MEDIA_STRING = '### Media Consumption' # the title of the section heading to add these notes to
 NOTE_EXT = "md" # or "txt"
 IFTTT_FILEPATH = "/Users/jonathan/Dropbox/IFTTT/"
 IFTTT_ARCHIVE_FILEPATH = "/Users/jonathan/Dropbox/IFTTT/Archive/"
+MAKE_INBOX_DIR = "/Users/jonathan/Dropbox/Make/"
+MAKE_ARCHIVE_FILEPATH = "/Users/jonathan/Dropbox/Make/Archive/"
 INSTAPAPER_FILE = "Instapaper Archived Items.txt"
 MEDIUM_FILE = "Medium Articles.txt"
-SPOTIFY_FILE = "Spotify Saved Tracks.txt"
+SPOTIFY_FILE_GLOB = "Spotify_*.doc" # make forces .doc extension for some reason
 TWITTER_FILE = "My Tweets.txt"
 YOUTUBE_LIKES_FILE = "YouTube liked videos.txt"
 YOUTUBE_UPLOAD_FILE = "YouTube upload.txt"
@@ -34,10 +38,15 @@ DATE_YYYYMMDD_FORMAT = '%Y%m%d'.freeze
 # To use test data instead of live data, uncomment relevant definitions.
 # NB: assumes one per line, apart from Twitter.
 #-------------------------------------------------------------------------------
-# $spotify_test_data = <<-END_S_DATA
+# $spotify_ifttt_test_data = <<-END_S_DATA
 # February 6, 2021 at 11:11PM | Espen Eriksen Trio | In the Mountains | Never Ending January | https://ift.tt/2TRqQiB | https://ift.tt/2LptJng
 # February 6, 2021 at 11:56AM | Brian Doerksen | Creation Calls | Today | https://ift.tt/2qQI2Sq | https://ift.tt/3pYs1by
 # END_S_DATA
+# $spotify_make_test_data = <<-END_S_DATA
+# 2023-11-01T16:53:22.000Z | Sovereign Grace Music | He Will Keep You (Psalm 121) - Live | Unchanging God: Songs from the Book of Psalms, Vol. 1 (Live) | | https://i.scdn.co/image/ab67616d0000b2734fcee6fd27886f84d6efc638
+# 2023-11-01T18:48:39.000Z | Julian & Roman Wasserfuhr | Englishman in New York | Gravity |  | https://i.scdn.co/image/ab67616d0000b273da5cb7f2949038355b094a7a
+# END_S_DATA
+
 
 # $instapaper_test_data = <<-END_I_DATA
 # February 6, 2021 at 05:49AM \\ Thomas Creedy: Imago Dei \\ https://ift.tt/3rJl1Bh \\
@@ -128,7 +137,7 @@ class NPCalFile
     @is_updated = false
 
     begin
-      log_message(" Reading NPCalFile for '#{@title}'")
+      log_message("  Reading NPCalFile for '#{@title}'")
 
       # Open file and read in all lines (finding any Done and Cancelled headers)
       # NB: needs the encoding line when run from launchctl, otherwise you get US-ASCII invalid byte errors (basically the 'locale' settings are different)
@@ -140,7 +149,7 @@ class NPCalFile
       end
       f.close
       @line_count = @lines.size # e.g. for lines 0-2 size => 3
-      log_message(" -> Read NPCalFile for '#{@title}' using id #{@id}. #{@line_count} lines")
+      log_message("   Finished making NPCalFile for '#{@title}' using id #{@id} with #{@line_count} lines")
     rescue StandardError => e
       error_message("ERROR: #{e.exception.message} when re-writing note file #{@filename}")
     end
@@ -151,7 +160,7 @@ class NPCalFile
     # NB: this is insertion at the line number, so that current line gets moved to be one later
     n = @line_count # start iterating from the end of the array
     line_number = n if line_number >= n # don't go beyond current size of @lines
-    log_message("  insert_new_line at #{line_number} (count=#{n}) ...")
+    log_message("   insert_new_line at #{line_number} (count=#{n}) ...")
     @lines.insert(line_number, new_line)
     @line_count = @lines.size
   end
@@ -159,7 +168,7 @@ class NPCalFile
   def append_line_to_section(new_line, section_heading)
     # Append new_line after 'section_heading' line.
     # If not found, then add 'section_heading' to the end first
-    log_message("  append_line_to_section for '#{section_heading}' ...")
+    log_message("   append_line_to_section for '#{section_heading}' ...")
     n = 0
     added = false
     found_section = false
@@ -181,7 +190,7 @@ class NPCalFile
 
   def rewrite_cal_file
     # write out this updated calendar file
-    main_message("  > writing updated version of #{@filename}")
+    main_message("   > writing updated version of #{@filename}")
     # open file and write all the lines out
     begin
       File.open(@filename, 'w') do |f|
@@ -197,63 +206,84 @@ end
 
 #--------------------------------------------------------------------------------------
 # SPOTIFY
+# - Saved Date (diff in Make/IFTTT) | Artist | Track name | Album | Track URL | Album art URL
+# Can have multiple files to process
+# Note: Should really go back to previous model, but concat the files first. However, this works, albeit over multiple invocations
 #--------------------------------------------------------------------------------------
 def process_spotify
-  spotify_filepath = IFTTT_FILEPATH + SPOTIFY_FILE
-  log_message("Starting to process Spotify file #{spotify_filepath}")
-  catch (:done) do  # provide a clean way out of this
-    if defined?($spotify_test_data)
-      f = $spotify_test_data
-      log_message("Using Spotify test data")
-    elsif File.exist?(spotify_filepath)
+  # spotify_filepath = IFTTT_FILEPATH + SPOTIFY_FILE
+  spotify_filepath = ""
+  found_filename = ""
+  
+  if defined?($spotify_make_test_data)
+    found_filename = "(spotify-make-test-data).doc"
+    f = $spotify_make_test_data
+    log_message("Using Spotify test data")
+  else
+    Dir.chdir(MAKE_INBOX_DIR)
+    Dir.glob(SPOTIFY_FILE_GLOB) do |found_file|
+      log_message("Found file #{found_file}")
+      spotify_filepath = MAKE_INBOX_DIR + found_file
+      found_filename = found_file
       if File.empty?(spotify_filepath)
         warning_message("Spotify file empty")
-        throw :done
+        break # look for another file
       else
+        log_message("Starting to process Spotify file #{spotify_filepath}")
         f = File.open(spotify_filepath, 'r', encoding: 'utf-8')
-      end
-    else
-      warning_message("No Spotify file found")
-      throw :done
+        # now proceed on
+      end  
     end
 
     begin
+      # Parse each line in the file (though often only one)
       f.each_line do |line|
-        # Parse each line
         parts = line.split('|')
+        artist = parts[1].strip
+        track_name = parts[2].strip
+        album = parts[3].strip
+        track_url = parts[4].strip
+        album_art_url = parts[5].strip
 
-        # parse the given date-time string, then create YYYYMMDD version of it
-        begin
-          trunc_first_field = truncate_text(parts[0], 122, false) # function's limit is 128, but it seems to need fewer than that
-          date_YYYYMMDD = Date.parse(trunc_first_field).strftime(DATE_YYYYMMDD_FORMAT)
-          log_message("  Found item to save with date #{date_YYYYMMDD}:")
-        rescue Date::Error => e
-          warning_message("couldn't parse date in: #{trunc_first_field}. Will default to today instead.")
-          date_YYYYMMDD = $date_now
-        end
-        log_message("  Found item to save with date #{date_YYYYMMDD}:")
+        # IFTTT version: parse the given date-time string, then create YYYYMMDD version of it
+        # begin
+        #   trunc_first_field = truncate_text(parts[0], 122, false) # function's limit is 128, but it seems to need fewer than that
+        #   date_YYYYMMDD = Date.parse(trunc_first_field).strftime(DATE_YYYYMMDD_FORMAT)
+        #   log_message("  Found item to save with date #{date_YYYYMMDD}:")
+        # rescue Date::Error => e
+        #   warning_message("couldn't parse date in: #{trunc_first_field}. Will default to today instead.")
+        #   date_YYYYMMDD = $date_now
+        # end
+
+        # Make version: 
+        save_date = parts[0].strip
+        date_YYYYMMDD = save_date.gsub('-', '')[0,8]
+        # log_message("  Found item to save with date #{date_YYYYMMDD}:")
 
         # Format line to add
-        line_to_add = "- new #spotify fave **#{parts[1].strip}**'s [#{parts[2].strip}](#{parts[4].strip}) from album **#{parts[3].strip}** ![album art](#{parts[5].strip})"
+        line_to_add = "- fave #spotify #{artist}'s **[#{track_name}](#{track_url})** from album #{album} ![](#{album_art_url})"
         log_message(line_to_add)
 
         # Read in the NP Calendar file for this date
         this_note = NPCalFile.new(date_YYYYMMDD)
 
-        # Add new lines to end of file, creating a ### Media section before it if it doesn't exist
+        # Add new lines to end of file, creating a "### Media Consumed" section before it if it doesn't exist
         this_note.append_line_to_section(line_to_add, MEDIA_STRING)
         this_note.rewrite_cal_file
-        main_message("-> Saved new Spotify fave to #{date_YYYYMMDD}")
+        main_message("-> Saved new Spotify fave to #{date_YYYYMMDD}\n")
       end
 
-      unless defined?($spotify_test_data)
+      unless defined?($spotify_make_test_data)
+        log_message("- Will close f for #{found_filename}")
         f.close
         # Now rename file to same as above but _YYYYMMDDHHMM on the end
-        archive_filename = "#{IFTTT_ARCHIVE_FILEPATH}#{SPOTIFY_FILE[0..-5]}_#{$date_time_now_file_fmttd}.txt"
+        archive_filename = "#{MAKE_ARCHIVE_FILEPATH}#{found_filename[0..-5]}_#{$date_time_now_file_fmttd}.txt"
+        log_message("- Will rename file to #{archive_filename}")
         File.rename(spotify_filepath, archive_filename)
       end
+      
     rescue StandardError => e
-      error_message("ERROR: #{e.exception.message} for file #{SPOTIFY_FILE}")
+      error_message("ERROR: #{e.exception.message} for file #{found_filename}")
     end
   end
 end
