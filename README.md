@@ -1,6 +1,6 @@
 # NotePlan Tools
 
-**Note: Much of the capability of this script is now available through the Plugins I've written that are available through NotePlan v3.  Please see [this overview](https://help.noteplan.co/article/65-commandbar-plugins), and the individual [plugins' details in the GitHub repository](https://github.com/NotePlan/plugins). In particular see 'Repeat Extensions' and 'Event Helpers'.**
+**Note: All of the capability of this script is now available through my NotePlan Plugins available directly in the app.  Please see [this overview](https://help.noteplan.co/article/65-commandbar-plugins), and the individual [plugins' details in the GitHub repository](https://github.com/NotePlan/plugins). In particular see 'Tidy Up', 'Repeat Extensions' and 'Event Helpers'.**
 
 `npTools.rb` is a Ruby script that adds functionality to the [NotePlan app](https://noteplan.co/). Particularly when run frequently, this provides a more flexible system for repeating tasks, allows for due dates to be expressed as offsets and therefore templates, moves items from Daily files to Note files, and creates events. It incorporates an earlier script to 'clean' or tidy up NotePlan's data files.
 
@@ -103,8 +103,6 @@ It **creates new repeats** for newly completed tasks that include a `@repeat(int
 
 NB: For this feature to work, you need to have the 'Append Completion Date'  NotePlan setting turned on, and to have the first type of tidy up (above) happening.
 
-<!-- In future, extending the **archiving** system. -->
-
 ## Running the Tools
 There are 2 ways of running the script:
 1. with no arguments (`ruby npTools.rb`), it checks all note and daily files updated in the last 24 hours. This is the way to use it automatically, running one or more times each day. (This is configurable by `HOURS_TO_PROCESS` below.)
@@ -200,4 +198,4 @@ launchctl load ~/Library/LaunchAgents/jgc.npTools.plist
 ```
 
 ## Problems? Suggestions?
-See the [GitHub project](https://github.com/jgclark/NotePlan-tools) for issues, or suggest improvements.
+I now work on improving the Plugins, instead of these old scripts. (Though sadly I have to use JavaScript for them, not Ruby which I do have a soft spot for.)
