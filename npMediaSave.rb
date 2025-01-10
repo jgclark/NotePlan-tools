@@ -4,6 +4,7 @@
 # by Jonathan Clark
 #
 # TODO: Change YouTube processing to be fed from Zapier
+# v0.5.0, 10.1.2024 - add YouTube favourites (via IFTTT)
 # v0.4.0, 30.12.2023 - switch Spotify to be fed by Make not IFTTT
 # v0.3.4, 27.5.2023 - deals with date parsing errors in Instapaper, and multi-line titles in Instapaper
 # v0.3.3, 20.3.2021 - ?
@@ -58,6 +59,11 @@ DATE_YYYYMMDD_FORMAT = '%Y%m%d'.freeze
 # February 6, 2021 at 03:56PM | A useful thread which highlights the problems of asking the wrong question. https://t.co/xEKimf9cLK | jgctweets | http://twitter.com/jgctweets/status/1353371090609909760
 # END_T_DATA
 
+# $youtube_liked_test_data = <<END_YTL_DATA
+# July 15, 2019 at 05:05PM \\ The Real Story Behind the Apollo 11 Computer Error | WSJ \\ https://www.youtube.com/watch?v=z4cn93H6sM0
+# December 22, 2024 at 08:59PM \\ Silent Night ⭐🎄 Christmas Chord Substitutions \\ https://www.youtube.com/watch?v=glw38rHmX9Q
+# END_YTL_DATA
+
 #-------------------------------------------------------------------------------
 # Other Constants & Settings
 #-------------------------------------------------------------------------------
@@ -67,6 +73,7 @@ DROPBOX_DIR = "#{USER_DIR}/Dropbox/Apps/NotePlan/Documents".freeze
 ICLOUDDRIVE_DIR = "#{USER_DIR}/Library/Mobile Documents/iCloud~co~noteplan~NotePlan/Documents".freeze
 CLOUDKIT_DIR = "#{USER_DIR}/Library/Containers/co.noteplan.NotePlan3/Data/Library/Application Support/co.noteplan.NotePlan3".freeze
 # TodaysDate = Date.today # can't work out why this needs to be a 'constant' to work -- something about visibility, I suppose
+# Following seems to fail trying to read things in NotePlan/Backups folder.
 np_base_dir = CLOUDKIT_DIR if Dir.exist?(CLOUDKIT_DIR) && Dir[File.join(CLOUDKIT_DIR, '**', '*')].count { |file| File.file?(file) } > 1
 NP_CALENDAR_DIR = "#{np_base_dir}/Calendar".freeze
 
@@ -137,19 +144,31 @@ class NPCalFile
     @is_updated = false
 
     begin
-      log_message("  Reading NPCalFile for '#{@title}'")
+      log_message("Reading NPCalFile for '#{@title}'")
 
       # Open file and read in all lines (finding any Done and Cancelled headers)
       # NB: needs the encoding line when run from launchctl, otherwise you get US-ASCII invalid byte errors (basically the 'locale' settings are different)
+      # First, if file doesn't exist, then create it.
+      if !File.exist?(@filename)
+        f = File.open(@filename, 'w', encoding: 'utf-8')
+        log_message("  - needed to CREATE file for '#{@filename}'")
+        f.close
+      end
+
       f = File.open(@filename, 'r', encoding: 'utf-8')
       n = 0
-      f.each_line do |line|
-        @lines[n] = line
-        n += 1
+      # Next check whether the file doesn't have any content before trying to read it
+      if !f.nil?
+        f.each_line do |line|
+          @lines[n] = line
+          n += 1
+        end
+      elsif
+        log_message("  - file '#{@filename}' exists but is empty")
       end
       f.close
       @line_count = @lines.size # e.g. for lines 0-2 size => 3
-      log_message("   Finished making NPCalFile for '#{@title}' using id #{@id} with #{@line_count} lines")
+      log_message("- Finished NPCalFile init for '#{@title}' using id #{@id} with #{@line_count} lines")
     rescue StandardError => e
       error_message("ERROR: #{e.exception.message} when re-writing note file #{@filename}")
     end
@@ -160,7 +179,7 @@ class NPCalFile
     # NB: this is insertion at the line number, so that current line gets moved to be one later
     n = @line_count # start iterating from the end of the array
     line_number = n if line_number >= n # don't go beyond current size of @lines
-    log_message("   insert_new_line at #{line_number} (count=#{n}) ...")
+    log_message("  - insert_new_line at #{line_number} (count=#{n}) ...")
     @lines.insert(line_number, new_line)
     @line_count = @lines.size
   end
@@ -168,7 +187,7 @@ class NPCalFile
   def append_line_to_section(new_line, section_heading)
     # Append new_line after 'section_heading' line.
     # If not found, then add 'section_heading' to the end first
-    log_message("   append_line_to_section for '#{section_heading}' ...")
+    log_message("  - append_line_to_section for '#{section_heading}' ...")
     n = 0
     added = false
     found_section = false
@@ -211,28 +230,23 @@ end
 # Note: Should really go back to previous model, but concat the files first. However, this works, albeit over multiple invocations
 #--------------------------------------------------------------------------------------
 def process_spotify
-  # spotify_filepath = IFTTT_FILEPATH + SPOTIFY_FILE
-  spotify_filepath = ""
-  found_filename = ""
-  
-  if defined?($spotify_make_test_data)
-    found_filename = "(spotify-make-test-data).doc"
-    f = $spotify_make_test_data
-    log_message("Using Spotify test data")
-  else
-    Dir.chdir(MAKE_INBOX_DIR)
-    Dir.glob(SPOTIFY_FILE_GLOB) do |found_file|
-      log_message("Found file #{found_file}")
-      spotify_filepath = MAKE_INBOX_DIR + found_file
-      found_filename = found_file
+  spotify_filepath = IFTTT_FILEPATH + SPOTIFY_FILE
+  # spotify_filepath = ""
+  catch (:done) do  # provide a clean way out of this
+    if defined?($spotify_test_data)
+      f = $spotify_test_data
+      log_message("Using Spotify test data")
+    elsif File.exist?(spotify_filepath)
       if File.empty?(spotify_filepath)
-        warning_message("Spotify file empty")
-        break # look for another file
+        warning_message("Note: Spotify file empty")
+        throw :done
       else
-        log_message("Starting to process Spotify file #{spotify_filepath}")
         f = File.open(spotify_filepath, 'r', encoding: 'utf-8')
-        # now proceed on
-      end  
+        log_message("Found Spotify file #{f.path} length #{f.size} bytes")
+      end
+    else
+      warning_message("No Spotify file found")
+      throw :done
     end
 
     begin
@@ -274,7 +288,6 @@ def process_spotify
       end
 
       unless defined?($spotify_make_test_data)
-        log_message("- Will close f for #{found_filename}")
         f.close
         # Now rename file to same as above but _YYYYMMDDHHMM on the end
         archive_filename = "#{MAKE_ARCHIVE_FILEPATH}#{found_filename[0..-5]}_#{$date_time_now_file_fmttd}.txt"
@@ -283,7 +296,7 @@ def process_spotify
       end
       
     rescue StandardError => e
-      error_message("ERROR: #{e.exception.message} for file #{found_filename}")
+      error_message("ERROR: #{e.exception.message} for file #{spotify_filepath}")
     end
   end
 end
@@ -304,6 +317,7 @@ def process_instapaper
         throw :done
       else
         f = File.open(instapaper_filepath, 'r', encoding: 'utf-8')
+        log_message("Found Instapaper file #{f.path} length #{f.size} bytes")
       end
     else
       warning_message("No Instapaper file found")
@@ -363,8 +377,70 @@ def process_instapaper
         archive_filename = "#{IFTTT_ARCHIVE_FILEPATH}#{INSTAPAPER_FILE[0..-5]}_#{$date_time_now_file_fmttd}.txt"
         File.rename(instapaper_filepath, archive_filename)
       end
+
     rescue StandardError => e
       error_message("ERROR: #{e.exception.message} when processing file #{INSTAPAPER_FILE}")
+    end
+  end
+end
+
+#--------------------------------------------------------------------------------------
+# YOUTUBE 'likes'
+#--------------------------------------------------------------------------------------
+def process_youtube
+  youtube_filepath = IFTTT_FILEPATH + YOUTUBE_LIKES_FILE
+  log_message("Starting to process youtube file #{youtube_filepath}")
+  catch (:done) do  # provide a clean way out of this
+    if defined?($youtube_liked_test_data)
+      f = $youtube_liked_test_data
+      log_message("Using YouTube test data")
+    elsif File.exist?(youtube_filepath)
+      if File.empty?(youtube_filepath)
+        warning_message("Note: YouTube file empty")
+        throw :done
+      else
+        f = File.open(youtube_filepath, 'r', encoding: 'utf-8')
+      end
+    else
+      warning_message("No YouTube file found")
+      throw :done
+    end
+
+    begin
+      f.each_line do |line|
+        log_message("") # blank line
+        # Parse each line
+        parts = line.split(' \\ ')
+        log_message("  #{line} --> #{parts.size} parts: #{parts}")
+        # parse the given date-time string, then create YYYYMMDD version of it
+        date_YYYYMMDD = Date.parse(parts[0]).strftime('%Y%m%d')
+        log_message("  Found item to save with date #{date_YYYYMMDD}:")
+
+        # Format line to add.
+        title = parts[1].strip
+        url = parts[2].strip if parts[2].start_with?('https://www.youtube.com/')
+        line_to_add = "- liked video [#{title}](#{url})"
+        log_message(line_to_add)
+
+        # Read in the NP Calendar file for this date
+        this_note = NPCalFile.new(date_YYYYMMDD)
+
+        # Add new lines to end of file, creating a ### Media section before it if it doesn't exist
+        this_note.append_line_to_section(line_to_add, MEDIA_STRING)
+        this_note.rewrite_cal_file
+        main_message("-> Saved new YouTube item to #{date_YYYYMMDD}")
+      end
+
+      unless defined?($youtube_liked_test_data)
+        f.close
+        # Now rename file to same as above but _YYYYMMDDHHMM on the end
+        archive_filename = "#{youtube_filepath[0..-5]}_#{$date_time_now_file_fmttd}.txt"
+        log_message("")
+        log_message("Finished. Will rename file to #{archive_filename}")
+        File.rename(youtube_filepath, archive_filename)
+      end
+    rescue StandardError => e
+      error_message("ERROR: #{e.exception.message} when processing file #{youtube_filepath}")
     end
   end
 end
@@ -392,6 +468,7 @@ def process_medium
     end
 
     begin
+      # FIXME: very slow on this line on MBA but not MM4
       f.each_line do |line|
         # Parse each line
         parts = line.split(" \\ ")
@@ -417,11 +494,11 @@ def process_medium
       unless defined?($medium_test_data)
         f.close
         # Now rename file to same as above but _YYYYMMDDHHMM on the end
-        archive_filename = "#{IFTTT_ARCHIVE_FILEPATH}#{MEDIUM_FILE[0..-5]}_#{$date_time_now_file_fmttd}.txt"
+        archive_filename = "#{medium_filepath[0..-5]}_#{$date_time_now_file_fmttd}.txt"
         File.rename(medium_filepath, archive_filename)
       end
     rescue StandardError => e
-      error_message("ERROR: #{e.exception.message} when processing file #{MEDIUM_FILE}")
+      error_message("ERROR: #{e.exception.message} when processing file #{medium_filepath}")
     end
   end
 end
@@ -442,6 +519,7 @@ def process_twitter
         throw :done
       else
         f = File.open(twitter_filepath, 'r', encoding: 'utf-8')
+        log_message("Found Twitter file #{f.path} length #{f.size} bytes")
       end
     else
       warning_message("No Twitter file found")
@@ -497,8 +575,8 @@ def process_twitter
       unless defined?($twitter_test_data)
         f.close
         # Now rename file to same as above but _YYYYMMDDHHMM on the end
-        archive_filename = "#{IFTTT_ARCHIVE_FILEPATH}#{TWITTER_FILE[0..-5]}_#{$date_time_now_file_fmttd}.txt"
-        File.rename(twitter_filepath, archive_filename)
+        archive_filename = "#{twitter_filepath[0..-5]}_#{$date_time_now_file_fmttd}.txt"
+        File.rename(twitter_filepathpath, archive_filename)
       end
     rescue StandardError => e
       error_message("ERROR: #{e.exception.message} when processing file #{TWITTER_FILE}")
@@ -520,6 +598,7 @@ opt_parser = OptionParser.new do |opts|
   options[:spotify] = false
   options[:twitter] = false
   options[:verbose] = false
+  options[:youtube] = false
   opts.on('-h', '--help', 'Show this help') do
     puts opts
     exit
@@ -539,6 +618,9 @@ opt_parser = OptionParser.new do |opts|
   opts.on('-v', '--verbose', 'Show information as I work') do
     $verbose = true
   end
+  opts.on('-y', '--youtube', 'Add YouTube records') do
+    options[:youtube] = true
+  end
 end
 opt_parser.parse! # parse out options, leaving file patterns to process
 
@@ -547,3 +629,4 @@ process_instapaper if options[:instapaper]
 process_medium if options[:medium]
 process_spotify if options[:spotify]
 process_twitter if options[:twitter]
+process_youtube if options[:youtube]
