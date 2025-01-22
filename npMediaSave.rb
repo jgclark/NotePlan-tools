@@ -69,12 +69,12 @@ DATE_YYYYMMDD_FORMAT = '%Y%m%d'.freeze
 #-------------------------------------------------------------------------------
 USERNAME = ENV['LOGNAME'] # pull username from environment
 USER_DIR = ENV['HOME'] # pull home directory from environment
-DROPBOX_DIR = "#{USER_DIR}/Dropbox/Apps/NotePlan/Documents".freeze
-ICLOUDDRIVE_DIR = "#{USER_DIR}/Library/Mobile Documents/iCloud~co~noteplan~NotePlan/Documents".freeze
+# DROPBOX_DIR = "#{USER_DIR}/Dropbox/Apps/NotePlan/Documents".freeze
+# ICLOUDDRIVE_DIR = "#{USER_DIR}/Library/Mobile Documents/iCloud~co~noteplan~NotePlan/Documents".freeze
 CLOUDKIT_DIR = "#{USER_DIR}/Library/Containers/co.noteplan.NotePlan3/Data/Library/Application Support/co.noteplan.NotePlan3".freeze
 # TodaysDate = Date.today # can't work out why this needs to be a 'constant' to work -- something about visibility, I suppose
-# Following seems to fail trying to read things in NotePlan/Backups folder.
-np_base_dir = CLOUDKIT_DIR if Dir.exist?(CLOUDKIT_DIR) && Dir[File.join(CLOUDKIT_DIR, '**', '*')].count { |file| File.file?(file) } > 1
+# Note: simplifying next line, as it seems to take an *age* to run
+np_base_dir = CLOUDKIT_DIR if Dir.exist?(CLOUDKIT_DIR) # && Dir[File.join(CLOUDKIT_DIR, '**', '*')].count { |file| File.file?(file) } > 1
 NP_CALENDAR_DIR = "#{np_base_dir}/Calendar".freeze
 
 # Colours to use with the colorization gem

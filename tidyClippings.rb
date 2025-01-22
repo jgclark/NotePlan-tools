@@ -15,7 +15,7 @@ require 'ostruct'
 #-------------------------------------------------------------------------------
 # Setting variables to tweak
 #-------------------------------------------------------------------------------
-LIVE = false
+LIVE = true
 
 NOTE_EXT = "md" # or "txt"
 # FILEPATH = "/Users/jonathan/Dropbox/IFTTT/Clips" # or ...
@@ -32,11 +32,12 @@ IGNORE_SECTION_TITLES = ['IgnoreMe', 'Resources', 'New Resources', 'Menu', 'Prim
 #-------------------------------------------------------------------------------
 USERNAME = ENV['LOGNAME'] # pull username from environment
 USER_DIR = ENV['HOME'] # pull home directory from environment
-NP_DROPBOX_DIR = "#{USER_DIR}/Dropbox/Apps/NotePlan/Documents".freeze
-NP_ICLOUDDRIVE_DIR = "#{USER_DIR}/Library/Mobile Documents/iCloud~co~noteplan~NotePlan/Documents".freeze
+# NP_DROPBOX_DIR = "#{USER_DIR}/Dropbox/Apps/NotePlan/Documents".freeze
+# NP_ICLOUDDRIVE_DIR = "#{USER_DIR}/Library/Mobile Documents/iCloud~co~noteplan~NotePlan/Documents".freeze
 NP_CLOUDKIT_DIR = "#{USER_DIR}/Library/Containers/co.noteplan.NotePlan3/Data/Library/Application Support/co.noteplan.NotePlan3".freeze
 # TodaysDate = Date.today # can't work out why this needs to be a 'constant' to work -- something about visibility, I suppose
-NP_BASE_DIR = NP_CLOUDKIT_DIR if Dir.exist?(NP_CLOUDKIT_DIR) && Dir[File.join(NP_CLOUDKIT_DIR, '**', '*')].count { |file| File.file?(file) } > 1
+# Note: simplifying next line, as it seems to take an *age* to run
+NP_BASE_DIR = NP_CLOUDKIT_DIR if Dir.exist?(NP_CLOUDKIT_DIR) # && Dir[File.join(NP_CLOUDKIT_DIR, '**', '*')].count { |file| File.file?(file) } > 1
 NP_CALENDAR_DIR = "#{NP_BASE_DIR}/Calendar".freeze
 
 # Colours to use with the colorization gem
