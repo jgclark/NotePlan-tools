@@ -420,6 +420,7 @@ def process_youtube
           lines = f.readlines
         end
         # f is now closed — no fd held open during the processing loop
+      end
     else
       warning_message("No YouTube file found")
       throw :done
