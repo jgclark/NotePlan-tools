@@ -4,13 +4,14 @@
 # by Jonathan Clark
 #
 # TODO: Change YouTube processing to be fed from Zapier
+# v0.5.1, 2026-06-12 - fix to file handling to avoid file open contention
 # v0.5.0, 10.1.2024 - add YouTube favourites (via IFTTT)
 # v0.4.0, 30.12.2023 - switch Spotify to be fed by Make not IFTTT
 # v0.3.4, 27.5.2023 - deals with date parsing errors in Instapaper, and multi-line titles in Instapaper
 # v0.3.3, 20.3.2021 - ?
 # v0.3.0, ? - now copes with multi-line tweets
 #-------------------------------------------------------------------------------
-VERSION = "0.4.0"
+VERSION = "0.5.1"
 require 'date'
 require 'cgi'
 require 'colorize'
@@ -230,10 +231,13 @@ end
 # Note: Should really go back to previous model, but concat the files first. However, this works, albeit over multiple invocations
 #--------------------------------------------------------------------------------------
 def process_spotify
-  spotify_filepath = IFTTT_FILEPATH + SPOTIFY_FILE
+  spotify_filepath = IFTTT_FILEPATH + SPOTIFY_FILE_GLOB
+  log_message("Starting to process Spotify")
   # spotify_filepath = ""
   catch (:done) do  # provide a clean way out of this
+    lines = []
     if defined?($spotify_test_data)
+      lines = $spotify_test_data.lines
       f = $spotify_test_data
       log_message("Using Spotify test data")
     elsif File.exist?(spotify_filepath)
@@ -241,8 +245,12 @@ def process_spotify
         warning_message("Note: Spotify file empty")
         throw :done
       else
-        f = File.open(spotify_filepath, 'r', encoding: 'utf-8')
-        log_message("Found Spotify file #{f.path} length #{f.size} bytes")
+        # Read ALL lines into memory, then close the file immediately
+        File.open(spotify_filepath, 'r', encoding: 'utf-8') do |f|
+          log_message("Found Spotify file #{f.path} length #{f.size} bytes")
+          lines = f.readlines
+        end
+        # f is now closed — no fd held open during the processing loop
       end
     else
       warning_message("No Spotify file found")
@@ -251,7 +259,7 @@ def process_spotify
 
     begin
       # Parse each line in the file (though often only one)
-      f.each_line do |line|
+      lines.each do |line|
         parts = line.split('|')
         artist = parts[1].strip
         track_name = parts[2].strip
@@ -288,7 +296,6 @@ def process_spotify
       end
 
       unless defined?($spotify_make_test_data)
-        f.close
         # Now rename file to same as above but _YYYYMMDDHHMM on the end
         archive_filename = "#{MAKE_ARCHIVE_FILEPATH}#{found_filename[0..-5]}_#{$date_time_now_file_fmttd}.txt"
         log_message("- Will rename file to #{archive_filename}")
@@ -306,18 +313,23 @@ end
 #--------------------------------------------------------------------------------------
 def process_instapaper
   instapaper_filepath = IFTTT_FILEPATH + INSTAPAPER_FILE
-  log_message("Starting to process Instapaper file #{instapaper_filepath}")
-  catch (:done) do  # provide a clean way out of this
+  log_message("Starting to process Instapaper")
+  catch (:done) do
+    lines = []
     if defined?($instapaper_test_data)
-      f = $instapaper_test_data
+      lines = $instapaper_test_data.lines
       log_message("Using Instapaper test data")
     elsif File.exist?(instapaper_filepath)
       if File.empty?(instapaper_filepath)
         warning_message("Note: Instapaper file empty")
         throw :done
       else
-        f = File.open(instapaper_filepath, 'r', encoding: 'utf-8')
-        log_message("Found Instapaper file #{f.path} length #{f.size} bytes")
+        # Read ALL lines into memory, then close the file immediately
+        File.open(instapaper_filepath, 'r', encoding: 'utf-8') do |f|
+          log_message("Found Instapaper file #{f.path} length #{f.size} bytes")
+          lines = f.readlines
+        end
+        # f is now closed — no fd held open during the processing loop
       end
     else
       warning_message("No Instapaper file found")
@@ -327,7 +339,7 @@ def process_instapaper
     begin
       needs_concatenating = false
       previous_line = ''
-      f.each_line do |line|
+      lines.each do |line|
         # Cope with items over several lines: concatenate with next line
         if needs_concatenating
           line = previous_line + line
@@ -372,7 +384,6 @@ def process_instapaper
       end
 
       unless defined?($instapaper_test_data)
-        f.close
         # Now rename file to same as above but _YYYYMMDDHHMM on the end
         archive_filename = "#{IFTTT_ARCHIVE_FILEPATH}#{INSTAPAPER_FILE[0..-5]}_#{$date_time_now_file_fmttd}.txt"
         File.rename(instapaper_filepath, archive_filename)
@@ -389,9 +400,11 @@ end
 #--------------------------------------------------------------------------------------
 def process_youtube
   youtube_filepath = IFTTT_FILEPATH + YOUTUBE_LIKES_FILE
-  log_message("Starting to process youtube file #{youtube_filepath}")
+  log_message("Starting to process YouTube")
   catch (:done) do  # provide a clean way out of this
+    lines = []
     if defined?($youtube_liked_test_data)
+      lines = $youtube_liked_test_data.lines
       f = $youtube_liked_test_data
       log_message("Using YouTube test data")
     elsif File.exist?(youtube_filepath)
@@ -399,15 +412,19 @@ def process_youtube
         warning_message("Note: YouTube file empty")
         throw :done
       else
-        f = File.open(youtube_filepath, 'r', encoding: 'utf-8')
-      end
+        # Read ALL lines into memory, then close the file immediately
+        File.open(youtube_filepath, 'r', encoding: 'utf-8') do |f|
+          log_message("Found YouTube file #{f.path} length #{f.size} bytes")
+          lines = f.readlines
+        end
+        # f is now closed — no fd held open during the processing loop
     else
       warning_message("No YouTube file found")
       throw :done
     end
 
     begin
-      f.each_line do |line|
+      lines.each do |line|
         log_message("") # blank line
         # Parse each line
         parts = line.split(' \\ ')
@@ -432,7 +449,6 @@ def process_youtube
       end
 
       unless defined?($youtube_liked_test_data)
-        f.close
         # Now rename file to same as above but _YYYYMMDDHHMM on the end
         archive_filename = "#{youtube_filepath[0..-5]}_#{$date_time_now_file_fmttd}.txt"
         log_message("")
@@ -450,7 +466,7 @@ end
 #--------------------------------------------------------------------------------------
 def process_medium
   medium_filepath = IFTTT_FILEPATH + MEDIUM_FILE
-  log_message("Starting to process Medium file #{medium_filepath}")
+  log_message("Starting to process Medium")
   catch (:done) do  # provide a clean way out of this
     if defined?($medium_test_data)
       f = $medium_test_data
@@ -460,7 +476,12 @@ def process_medium
         warning_message("Note: Medium file empty")
         throw :done
       else
-        f = File.open(medium_filepath, 'r', encoding: 'utf-8')
+        # Read ALL lines into memory, then close the file immediately
+        File.open(medium_filepath, 'r', encoding: 'utf-8') do |f|
+          log_message("Found Medium file #{f.path} length #{f.size} bytes")
+          lines = f.readlines
+        end
+        # f is now closed — no fd held open during the processing loop
       end
     else
       warning_message("No Medium file found")
@@ -469,7 +490,7 @@ def process_medium
 
     begin
       # FIXME: very slow on this line on MBA but not MM4
-      f.each_line do |line|
+      lines.each do |line|
         # Parse each line
         parts = line.split(" \\ ")
         # log_message("  #{line} --> #{parts}")
@@ -492,7 +513,6 @@ def process_medium
       end
 
       unless defined?($medium_test_data)
-        f.close
         # Now rename file to same as above but _YYYYMMDDHHMM on the end
         archive_filename = "#{medium_filepath[0..-5]}_#{$date_time_now_file_fmttd}.txt"
         File.rename(medium_filepath, archive_filename)
@@ -508,9 +528,11 @@ end
 #--------------------------------------------------------------------------------------
 def process_twitter
   twitter_filepath = IFTTT_FILEPATH + TWITTER_FILE
-  log_message("Starting to process twitter file #{twitter_filepath}")
+  log_message("Starting to process Twitter")
   catch (:done) do  # provide a clean way out of this
+    lines = []
     if defined?($twitter_test_data)
+      lines = $twitter_test_data.lines
       f = $twitter_test_data
       log_message("Using Twitter test data")
     elsif File.exist?(twitter_filepath)
@@ -518,7 +540,12 @@ def process_twitter
         warning_message("Note: Twitter file empty")
         throw :done
       else
-        f = File.open(twitter_filepath, 'r', encoding: 'utf-8')
+        # Read ALL lines into memory, then close the file immediately
+        File.open(twitter_filepath, 'r', encoding: 'utf-8') do |f|
+          log_message("Found Twitter file #{f.path} length #{f.size} bytes")
+          lines = f.readlines
+        end
+        # f is now closed — no fd held open during the processing loop
         log_message("Found Twitter file #{f.path} length #{f.size} bytes")
       end
     else
@@ -529,7 +556,7 @@ def process_twitter
     begin
       needs_concatenating = false
       previous_line = ''
-      f.each_line do |line|
+      lines.each do |line|
         # Cope with tweets over several lines: concatenate with next line
         if needs_concatenating
           line = previous_line + line
@@ -573,7 +600,6 @@ def process_twitter
       end
 
       unless defined?($twitter_test_data)
-        f.close
         # Now rename file to same as above but _YYYYMMDDHHMM on the end
         archive_filename = "#{twitter_filepath[0..-5]}_#{$date_time_now_file_fmttd}.txt"
         File.rename(twitter_filepathpath, archive_filename)
