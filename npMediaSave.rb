@@ -4,6 +4,7 @@
 # by Jonathan Clark
 #
 # TODO: Change YouTube processing to be fed from Zapier
+# v0.5.3, 2026-06-12 - fix 9 further bugs found by @Claude code analysis
 # v0.5.2, 2026-06-12 - fix to file handling to avoid file open contention
 # v0.5.1, 2025-05-21 - fix to Spotify file
 # v0.5.0, 10.1.2024 - add YouTube favourites (via IFTTT)
@@ -12,7 +13,7 @@
 # v0.3.3, 20.3.2021 - ?
 # v0.3.0, ? - now copes with multi-line tweets
 #-------------------------------------------------------------------------------
-VERSION = "0.5.2"
+VERSION = "0.5.3"
 require 'date'
 require 'cgi'
 require 'colorize'
@@ -166,7 +167,7 @@ class NPCalFile
           @lines[n] = line
           n += 1
         end
-      elsif
+      else
         log_message("  - file '#{@filename}' exists but is empty")
       end
       f.close
@@ -221,7 +222,7 @@ class NPCalFile
         end
       end
     rescue StandardError => e
-      error_message("ERROR: #{e.exception.message} when re-writing calendar file #{filepath}")
+      error_message("ERROR: #{e.exception.message} when re-writing calendar file #{@filename}")
     end
   end
 end
@@ -240,7 +241,6 @@ def process_spotify
     lines = []
     if defined?($spotify_test_data)
       lines = $spotify_test_data.lines
-      f = $spotify_test_data
       log_message("Using Spotify test data")
     elsif File.exist?(spotify_filepath)
       if File.empty?(spotify_filepath)
@@ -297,9 +297,9 @@ def process_spotify
         main_message("-> Saved new Spotify fave to #{date_YYYYMMDD}\n")
       end
 
-      unless defined?($spotify_make_test_data)
+      unless defined?($spotify_test_data)
         # Now rename file to same as above but _YYYYMMDDHHMM on the end
-        archive_filename = "#{MAKE_ARCHIVE_FILEPATH}#{found_filename[0..-5]}_#{$date_time_now_file_fmttd}.txt"
+        archive_filename = "#{MAKE_ARCHIVE_FILEPATH}#{SPOTIFY_FILE[0..-5]}_#{$date_time_now_file_fmttd}.doc"
         log_message("- Will rename file to #{archive_filename}")
         File.rename(spotify_filepath, archive_filename)
       end
@@ -407,7 +407,6 @@ def process_youtube
     lines = []
     if defined?($youtube_liked_test_data)
       lines = $youtube_liked_test_data.lines
-      f = $youtube_liked_test_data
       log_message("Using YouTube test data")
     elsif File.exist?(youtube_filepath)
       if File.empty?(youtube_filepath)
@@ -472,7 +471,7 @@ def process_medium
   log_message("Starting to process Medium")
   catch (:done) do  # provide a clean way out of this
     if defined?($medium_test_data)
-      f = $medium_test_data
+      lines = $medium_test_data.lines
       log_message("Using Medium test data")
     elsif File.exist?(medium_filepath)
       if File.empty?(medium_filepath)
@@ -536,7 +535,6 @@ def process_twitter
     lines = []
     if defined?($twitter_test_data)
       lines = $twitter_test_data.lines
-      f = $twitter_test_data
       log_message("Using Twitter test data")
     elsif File.exist?(twitter_filepath)
       if File.empty?(twitter_filepath)
@@ -549,7 +547,6 @@ def process_twitter
           lines = f.readlines
         end
         # f is now closed — no fd held open during the processing loop
-        log_message("Found Twitter file #{f.path} length #{f.size} bytes")
       end
     else
       warning_message("No Twitter file found")
@@ -605,7 +602,7 @@ def process_twitter
       unless defined?($twitter_test_data)
         # Now rename file to same as above but _YYYYMMDDHHMM on the end
         archive_filename = "#{twitter_filepath[0..-5]}_#{$date_time_now_file_fmttd}.txt"
-        File.rename(twitter_filepathpath, archive_filename)
+        File.rename(twitter_filepath, archive_filename)
       end
     rescue StandardError => e
       error_message("ERROR: #{e.exception.message} when processing file #{TWITTER_FILE}")
