@@ -4,14 +4,15 @@
 # by Jonathan Clark
 #
 # TODO: Change YouTube processing to be fed from Zapier
-# v0.5.1, 2026-06-12 - fix to file handling to avoid file open contention
+# v0.5.2, 2026-06-12 - fix to file handling to avoid file open contention
+# v0.5.1, 2025-05-21 - fix to Spotify file
 # v0.5.0, 10.1.2024 - add YouTube favourites (via IFTTT)
 # v0.4.0, 30.12.2023 - switch Spotify to be fed by Make not IFTTT
 # v0.3.4, 27.5.2023 - deals with date parsing errors in Instapaper, and multi-line titles in Instapaper
 # v0.3.3, 20.3.2021 - ?
 # v0.3.0, ? - now copes with multi-line tweets
 #-------------------------------------------------------------------------------
-VERSION = "0.5.1"
+VERSION = "0.5.2"
 require 'date'
 require 'cgi'
 require 'colorize'
@@ -28,7 +29,8 @@ MAKE_INBOX_DIR = "/Users/jonathan/Dropbox/Make/"
 MAKE_ARCHIVE_FILEPATH = "/Users/jonathan/Dropbox/Make/Archive/"
 INSTAPAPER_FILE = "Instapaper Archived Items.txt"
 MEDIUM_FILE = "Medium Articles.txt"
-SPOTIFY_FILE_GLOB = "Spotify_*.doc" # make forces .doc extension for some reason
+# SPOTIFY_FILE_GLOB = "Spotify_*.doc" # make forces .doc extension for some reason
+SPOTIFY_FILE = "Spotify Saved Tracks.doc" # make forces .doc extension for some reason. TODO: Is this still working? Previously had been a glob that might or might not have worked.
 TWITTER_FILE = "My Tweets.txt"
 YOUTUBE_LIKES_FILE = "YouTube liked videos.txt"
 YOUTUBE_UPLOAD_FILE = "YouTube upload.txt"
@@ -231,7 +233,7 @@ end
 # Note: Should really go back to previous model, but concat the files first. However, this works, albeit over multiple invocations
 #--------------------------------------------------------------------------------------
 def process_spotify
-  spotify_filepath = IFTTT_FILEPATH + SPOTIFY_FILE_GLOB
+  spotify_filepath = IFTTT_FILEPATH + SPOTIFY_FILE
   log_message("Starting to process Spotify")
   # spotify_filepath = ""
   catch (:done) do  # provide a clean way out of this
