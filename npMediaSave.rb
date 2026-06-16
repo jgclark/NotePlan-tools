@@ -131,24 +131,51 @@ def with_synced_file_retry(max_retries = 8)
     retries += 1
     raise e if retries > max_retries
 
-    sleep(0.25 * (2**(retries - 1)))
+    sleep(0.25 * (2**(retries - 1))) # give it a bit longer each time (0.25, 0.5, 1, 2, 4, 8, 16 seconds)
     retry
   end
 end
 
 # Read all lines from a Dropbox/synced file without holding the source file open.
-# Copies to a local temp file first to avoid Errno::EDEADLK from buffered reads on FUSE mounts.
+# If the file cannot be read successfully, return an empty list so the caller can
+# skip it and continue processing other inputs.
 def read_lines_from_synced_file(filepath)
   content = read_synced_file_content(filepath)
+  if content.nil?
+    warning_message("Unable to read #{filepath}, skipping.")
+    return []
+  end
+
   content.lines
 end
 
+# # Read full file content from a path that may live on Dropbox or other synced storage.
+# # Use an external process here because Ruby's direct reads can still hit
+# # Errno::EDEADLK on Dropbox/FUSE-backed files.
+# def read_file_via_shell(filepath)
+#   stdout, stderr, status = Open3.capture3('cat', filepath)
+#   raise "Unable to read #{filepath}: #{stderr}" unless status.success?
+
+#   stdout
+# end
+
 # Read full file content from a path that may live on Dropbox or other synced storage.
 def read_synced_file_content(filepath)
-  Dir.mktmpdir('npMediaSave') do |tmpdir|
-    tmp_path = File.join(tmpdir, File.basename(filepath))
-    with_synced_file_retry { FileUtils.cp(filepath, tmp_path) }
-    File.read(tmp_path, encoding: 'utf-8')
+  retries = 0
+  begin
+    File.open(filepath, 'r', encoding: 'utf-8') { |f| f.read }
+  rescue Errno::EDEADLK, Errno::EBUSY
+    retries += 1
+    if retries < 5
+      sleep(0.3 * retries)
+      retry
+    else
+      warn "Giving up on reading #{filepath} after #{retries} attempts"
+      return nil
+    end
+  rescue StandardError => e
+    warn "Unable to read #{filepath}: #{e.class}: #{e.message}"
+    nil
   end
 end
 
