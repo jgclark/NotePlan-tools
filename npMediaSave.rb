@@ -4,6 +4,7 @@
 # by Jonathan Clark
 #
 # TODO: Change YouTube processing to be fed from Zapier
+# v0.5.4, 2026-06-16 - fix Errno::EDEADLK when reading Dropbox IFTTT files (copy to temp first) @CursorAI
 # v0.5.3, 2026-06-12 - fix 9 further bugs found by @Claude code analysis
 # v0.5.2, 2026-06-12 - fix to file handling to avoid file open contention
 # v0.5.1, 2025-05-21 - fix to Spotify file
@@ -13,11 +14,13 @@
 # v0.3.3, 20.3.2021 - ?
 # v0.3.0, ? - now copes with multi-line tweets
 #-------------------------------------------------------------------------------
-VERSION = "0.5.3"
+VERSION = "0.5.4"
 require 'date'
 require 'cgi'
 require 'colorize'
+require 'fileutils'
 require 'optparse' # more details at https://docs.ruby-lang.org/en/2.1.0/OptionParser.html
+require 'tmpdir'
 
 #-------------------------------------------------------------------------------
 # Setting variables to tweak
@@ -117,6 +120,36 @@ end
 
 def log_message(message)
   puts message if $verbose
+end
+
+# Retry a block when Dropbox/synced storage returns transient lock errors on macOS.
+def with_synced_file_retry(max_retries = 8)
+  retries = 0
+  begin
+    yield
+  rescue Errno::EDEADLK, Errno::EBUSY => e
+    retries += 1
+    raise e if retries > max_retries
+
+    sleep(0.25 * (2**(retries - 1)))
+    retry
+  end
+end
+
+# Read all lines from a Dropbox/synced file without holding the source file open.
+# Copies to a local temp file first to avoid Errno::EDEADLK from buffered reads on FUSE mounts.
+def read_lines_from_synced_file(filepath)
+  content = read_synced_file_content(filepath)
+  content.lines
+end
+
+# Read full file content from a path that may live on Dropbox or other synced storage.
+def read_synced_file_content(filepath)
+  Dir.mktmpdir('npMediaSave') do |tmpdir|
+    tmp_path = File.join(tmpdir, File.basename(filepath))
+    with_synced_file_retry { FileUtils.cp(filepath, tmp_path) }
+    File.read(tmp_path, encoding: 'utf-8')
+  end
 end
 
 def truncate_text(text, max_length = 100000, use_elipsis = false)
@@ -247,12 +280,10 @@ def process_spotify
         warning_message("Note: Spotify file empty")
         throw :done
       else
-        # Read ALL lines into memory, then close the file immediately
-        File.open(spotify_filepath, 'r', encoding: 'utf-8') do |f|
-          log_message("Found Spotify file #{f.path} length #{f.size} bytes")
-          lines = f.readlines
-        end
-        # f is now closed — no fd held open during the processing loop
+        # Read ALL lines into memory via a local temp copy (avoids Dropbox EDEADLK on read)
+        log_message("Found Spotify file #{spotify_filepath}")
+        lines = read_lines_from_synced_file(spotify_filepath)
+        log_message("  read #{lines.size} lines")
       end
     else
       warning_message("No Spotify file found")
@@ -326,12 +357,10 @@ def process_instapaper
         warning_message("Note: Instapaper file empty")
         throw :done
       else
-        # Read ALL lines into memory, then close the file immediately
-        File.open(instapaper_filepath, 'r', encoding: 'utf-8') do |f|
-          log_message("Found Instapaper file #{f.path} length #{f.size} bytes")
-          lines = f.readlines
-        end
-        # f is now closed — no fd held open during the processing loop
+        # Read ALL lines into memory via a local temp copy (avoids Dropbox EDEADLK on read)
+        log_message("Found Instapaper file #{instapaper_filepath}")
+        lines = read_lines_from_synced_file(instapaper_filepath)
+        log_message("  read #{lines.size} lines")
       end
     else
       warning_message("No Instapaper file found")
@@ -413,12 +442,10 @@ def process_youtube
         warning_message("Note: YouTube file empty")
         throw :done
       else
-        # Read ALL lines into memory, then close the file immediately
-        File.open(youtube_filepath, 'r', encoding: 'utf-8') do |f|
-          log_message("Found YouTube file #{f.path} length #{f.size} bytes")
-          lines = f.readlines
-        end
-        # f is now closed — no fd held open during the processing loop
+        # Read ALL lines into memory via a local temp copy (avoids Dropbox EDEADLK on read)
+        log_message("Found YouTube file #{youtube_filepath}")
+        lines = read_lines_from_synced_file(youtube_filepath)
+        log_message("  read #{lines.size} lines")
       end
     else
       warning_message("No YouTube file found")
@@ -478,12 +505,10 @@ def process_medium
         warning_message("Note: Medium file empty")
         throw :done
       else
-        # Read ALL lines into memory, then close the file immediately
-        File.open(medium_filepath, 'r', encoding: 'utf-8') do |f|
-          log_message("Found Medium file #{f.path} length #{f.size} bytes")
-          lines = f.readlines
-        end
-        # f is now closed — no fd held open during the processing loop
+        # Read ALL lines into memory via a local temp copy (avoids Dropbox EDEADLK on read)
+        log_message("Found Medium file #{medium_filepath}")
+        lines = read_lines_from_synced_file(medium_filepath)
+        log_message("  read #{lines.size} lines")
       end
     else
       warning_message("No Medium file found")
@@ -541,12 +566,10 @@ def process_twitter
         warning_message("Note: Twitter file empty")
         throw :done
       else
-        # Read ALL lines into memory, then close the file immediately
-        File.open(twitter_filepath, 'r', encoding: 'utf-8') do |f|
-          log_message("Found Twitter file #{f.path} length #{f.size} bytes")
-          lines = f.readlines
-        end
-        # f is now closed — no fd held open during the processing loop
+        # Read ALL lines into memory via a local temp copy (avoids Dropbox EDEADLK on read)
+        log_message("Found Twitter file #{twitter_filepath}")
+        lines = read_lines_from_synced_file(twitter_filepath)
+        log_message("  read #{lines.size} lines")
       end
     else
       warning_message("No Twitter file found")
