@@ -3,7 +3,9 @@
 # Script to Save some Media notes into NotePlan
 # by Jonathan Clark
 #
-# TODO: Change YouTube processing to be fed from Zapier
+# v0.7.1, 2026-08-01 - fixed archiving bug for YouTube-liked, and removed Medium processing (no longer required)
+# v0.7.0, 2026-06-26 - changed over to local YouTube processing, not IFTTT. Now uses YouTube-liked.tsv and YouTube-channel-uploads.tsv
+# v0.6.0, 2026-06-24 - changed Instapaper to local (instapaper-process-archived.js) not IFTTT. Here it just changes location.
 # v0.5.4, 2026-06-16 - fix Errno::EDEADLK when reading Dropbox IFTTT files (copy to temp first) @CursorAI
 # v0.5.3, 2026-06-12 - fix 9 further bugs found by @Claude code analysis
 # v0.5.2, 2026-06-12 - fix to file handling to avoid file open contention
@@ -14,7 +16,7 @@
 # v0.3.3, 20.3.2021 - ?
 # v0.3.0, ? - now copes with multi-line tweets
 #-------------------------------------------------------------------------------
-VERSION = "0.5.4"
+VERSION = "0.7.1"
 require 'date'
 require 'cgi'
 require 'colorize'
@@ -25,19 +27,21 @@ require 'tmpdir'
 #-------------------------------------------------------------------------------
 # Setting variables to tweak
 #-------------------------------------------------------------------------------
-MEDIA_STRING = '### Media Consumption' # the title of the section heading to add these notes to
+NOTE_SECTION_HEADING = '### Media Consumption' # the title of the section heading to add these notes to
 NOTE_EXT = "md" # or "txt"
 IFTTT_FILEPATH = "/Users/jonathan/Dropbox/IFTTT/"
 IFTTT_ARCHIVE_FILEPATH = "/Users/jonathan/Dropbox/IFTTT/Archive/"
+LOCAL_PROCESSING_FILEPATH = "/Users/jonathan/processing/"
+LOCAL_PROCESSING_ARCHIVE_FILEPATH = "/Users/jonathan/processing/Archive/"
 MAKE_INBOX_DIR = "/Users/jonathan/Dropbox/Make/"
 MAKE_ARCHIVE_FILEPATH = "/Users/jonathan/Dropbox/Make/Archive/"
-INSTAPAPER_FILE = "Instapaper Archived Items.txt"
-MEDIUM_FILE = "Medium Articles.txt"
+# INSTAPAPER_FILE = "Instapaper Archived Items.txt" # pre v0.6.0
+INSTAPAPER_FILE = "Instapaper-newly-read.txt"
 # SPOTIFY_FILE_GLOB = "Spotify_*.doc" # make forces .doc extension for some reason
 SPOTIFY_FILE = "Spotify Saved Tracks.doc" # make forces .doc extension for some reason. TODO: Is this still working? Previously had been a glob that might or might not have worked.
 TWITTER_FILE = "My Tweets.txt"
-YOUTUBE_LIKES_FILE = "YouTube liked videos.txt"
-YOUTUBE_UPLOAD_FILE = "YouTube upload.txt"
+YOUTUBE_LIKES_FILE = "YouTube-liked.tsv"
+YOUTUBE_UPLOAD_FILE = "YouTube-channel-uploads.tsv"
 DATE_TIME_LOG_FORMAT = '%e %b %Y %H:%M'.freeze # only used in logging
 DATE_TIME_APPEND_FORMAT = '%Y%m%d%H%M'.freeze
 DATE_YYYYMMDD_FORMAT = '%Y%m%d'.freeze
@@ -350,7 +354,7 @@ def process_spotify
         this_note = NPCalFile.new(date_YYYYMMDD)
 
         # Add new lines to end of file, creating a "### Media Consumed" section before it if it doesn't exist
-        this_note.append_line_to_section(line_to_add, MEDIA_STRING)
+        this_note.append_line_to_section(line_to_add, NOTE_SECTION_HEADING)
         this_note.rewrite_cal_file
         main_message("-> Saved new Spotify fave to #{date_YYYYMMDD}\n")
       end
@@ -372,7 +376,7 @@ end
 # INSTAPAPER
 #--------------------------------------------------------------------------------------
 def process_instapaper
-  instapaper_filepath = IFTTT_FILEPATH + INSTAPAPER_FILE
+  instapaper_filepath = LOCAL_PROCESSING_FILEPATH + INSTAPAPER_FILE
   log_message("Starting to process Instapaper")
   catch (:done) do
     lines = []
@@ -436,14 +440,14 @@ def process_instapaper
         this_note = NPCalFile.new(date_YYYYMMDD)
 
         # Add new lines to end of file, creating a ### Media section before it if it doesn't exist
-        this_note.append_line_to_section(line_to_add, MEDIA_STRING)
+        this_note.append_line_to_section(line_to_add, NOTE_SECTION_HEADING)
         this_note.rewrite_cal_file
         main_message("-> Saved new Instapaper item to #{date_YYYYMMDD}")
       end
 
       unless defined?($instapaper_test_data)
         # Now rename file to same as above but _YYYYMMDDHHMM on the end
-        archive_filename = "#{IFTTT_ARCHIVE_FILEPATH}#{INSTAPAPER_FILE[0..-5]}_#{$date_time_now_file_fmttd}.txt"
+        archive_filename = "#{LOCAL_PROCESSING_ARCHIVE_FILEPATH}instapaper_archived_#{$date_time_now_file_fmttd}.txt"
         File.rename(instapaper_filepath, archive_filename)
       end
 
@@ -457,7 +461,7 @@ end
 # YOUTUBE 'likes'
 #--------------------------------------------------------------------------------------
 def process_youtube
-  youtube_filepath = IFTTT_FILEPATH + YOUTUBE_LIKES_FILE
+  youtube_filepath = LOCAL_PROCESSING_FILEPATH + YOUTUBE_LIKES_FILE
   log_message("Starting to process YouTube")
   catch (:done) do  # provide a clean way out of this
     lines = []
@@ -481,98 +485,56 @@ def process_youtube
 
     begin
       lines.each do |line|
-        log_message("") # blank line
+        log_message("")
         # Parse each line
-        parts = line.split(' \\ ')
+        parts = line.chomp.split("\t", 5)
         log_message("  #{line} --> #{parts.size} parts: #{parts}")
+
+        if parts.length < 5
+          warning_message("Skipping malformed YouTube line: #{line.inspect}")
+          next
+        end
+
         # parse the given date-time string, then create YYYYMMDD version of it
-        date_YYYYMMDD = Date.parse(parts[0]).strftime('%Y%m%d')
+        begin
+          date_YYYYMMDD = Date.parse(parts[0].strip).strftime('%Y%m%d')
+        rescue Date::Error => e
+          warning_message("couldn't parse date in YouTube line: #{parts[0].to_s.inspect}. Will default to today instead.")
+          date_YYYYMMDD = $date_now
+        end
         log_message("  Found item to save with date #{date_YYYYMMDD}:")
 
         # Format line to add.
-        title = parts[1].strip
-        url = parts[2].strip if parts[2].start_with?('https://www.youtube.com/')
-        line_to_add = "- liked video [#{title}](#{url})"
+        url = parts[1].to_s.strip
+        channel = parts[2].to_s.strip
+        publishedAt = parts[3].to_s.strip
+        title = parts[4].to_s.strip
+        if url.empty? || !url.start_with?('https://www.youtube.com/')
+          warning_message("Skipping YouTube item with missing or invalid URL: #{url.inspect}")
+          next
+        end
+
+        line_to_add = "- [#{title}](#{url}) from #{channel} pub #{publishedAt}"
         log_message(line_to_add)
 
         # Read in the NP Calendar file for this date
         this_note = NPCalFile.new(date_YYYYMMDD)
 
         # Add new lines to end of file, creating a ### Media section before it if it doesn't exist
-        this_note.append_line_to_section(line_to_add, MEDIA_STRING)
+        this_note.append_line_to_section(line_to_add, NOTE_SECTION_HEADING)
         this_note.rewrite_cal_file
         main_message("-> Saved new YouTube item to #{date_YYYYMMDD}")
       end
 
       unless defined?($youtube_liked_test_data)
         # Now rename file to same as above but _YYYYMMDDHHMM on the end
-        archive_filename = "#{youtube_filepath[0..-5]}_#{$date_time_now_file_fmttd}.txt"
+        archive_filename = "#{LOCAL_PROCESSING_ARCHIVE_FILEPATH}/#{YOUTUBE_LIKES_FILE}_#{$date_time_now_file_fmttd}.tsv"
         log_message("")
         log_message("Finished. Will rename file to #{archive_filename}")
         File.rename(youtube_filepath, archive_filename)
       end
     rescue StandardError => e
       error_message("ERROR: #{e.exception.message} when processing file #{youtube_filepath}")
-    end
-  end
-end
-
-#--------------------------------------------------------------------------------------
-# MEDIUM articles
-#--------------------------------------------------------------------------------------
-def process_medium
-  medium_filepath = IFTTT_FILEPATH + MEDIUM_FILE
-  log_message("Starting to process Medium")
-  catch (:done) do  # provide a clean way out of this
-    if defined?($medium_test_data)
-      lines = $medium_test_data.lines
-      log_message("Using Medium test data")
-    elsif File.exist?(medium_filepath)
-      if File.empty?(medium_filepath)
-        warning_message("Note: Medium file empty")
-        throw :done
-      else
-        # Read ALL lines into memory via a local temp copy (avoids Dropbox EDEADLK on read)
-        log_message("Found Medium file #{medium_filepath}")
-        lines = read_lines_from_synced_file(medium_filepath)
-        log_message("  read #{lines.size} lines")
-      end
-    else
-      warning_message("No Medium file found")
-      throw :done
-    end
-
-    begin
-      # FIXME: very slow on this line on MBA but not MM4
-      lines.each do |line|
-        # Parse each line
-        parts = line.split(" \\ ")
-        # log_message("  #{line} --> #{parts}")
-        # parse the given date-time string, then create YYYYMMDD version of it
-        date_YYYYMMDD = Date.parse(parts[0]).strftime('%Y%m%d')
-        log_message("  Found item to save with date #{date_YYYYMMDD}:")
-
-        # Format line to add. Guard against possible empty fields
-        parts[2] = '' if parts[2].nil?
-        line_to_add = "- #article **[#{parts[1].strip}](#{parts[2].strip})**"
-        log_message(line_to_add)
-
-        # Read in the NP Calendar file for this date
-        this_note = NPCalFile.new(date_YYYYMMDD)
-
-        # Add new lines to end of file, creating a ### Media section before it if it doesn't exist
-        this_note.append_line_to_section(line_to_add, MEDIA_STRING)
-        this_note.rewrite_cal_file
-        main_message("-> Saved new Medium item to #{date_YYYYMMDD}")
-      end
-
-      unless defined?($medium_test_data)
-        # Now rename file to same as above but _YYYYMMDDHHMM on the end
-        archive_filename = "#{medium_filepath[0..-5]}_#{$date_time_now_file_fmttd}.txt"
-        File.rename(medium_filepath, archive_filename)
-      end
-    rescue StandardError => e
-      error_message("ERROR: #{e.exception.message} when processing file #{medium_filepath}")
     end
   end
 end
@@ -642,7 +604,7 @@ def process_twitter
         this_note = NPCalFile.new(date_YYYYMMDD)
 
         # Add new lines to end of file, creating a ### Media section before it if it doesn't exist
-        this_note.append_line_to_section(line_to_add, MEDIA_STRING)
+        this_note.append_line_to_section(line_to_add, NOTE_SECTION_HEADING)
         this_note.rewrite_cal_file
         main_message("-> Saved new Twitter item to #{date_YYYYMMDD}")
         needs_concatenating = false
@@ -682,9 +644,6 @@ opt_parser = OptionParser.new do |opts|
   opts.on('-i', '--instapaper', 'Add Instapaper records') do
     options[:instapaper] = true
   end
-  opts.on('-m', '--medium', 'Add Medium records') do
-    options[:medium] = true
-  end
   opts.on('-s', '--spotify', 'Add Spotify records') do
     options[:spotify] = true
   end
@@ -702,7 +661,6 @@ opt_parser.parse! # parse out options, leaving file patterns to process
 
 log_message("\nStarting npMediaSave v#{VERSION} at #{$date_time_now_log_fmttd}")
 process_instapaper if options[:instapaper]
-process_medium if options[:medium]
 process_spotify if options[:spotify]
 process_twitter if options[:twitter]
 process_youtube if options[:youtube]
