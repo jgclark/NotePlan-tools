@@ -3,6 +3,7 @@
 # Script to Save some Media notes into NotePlan
 # by Jonathan Clark
 #
+# v0.7.2, 2026-08-07 - finished removing Medium processing
 # v0.7.1, 2026-08-01 - fixed archiving bug for YouTube-liked, and removed Medium processing (no longer required)
 # v0.7.0, 2026-06-26 - changed over to local YouTube processing, not IFTTT. Now uses YouTube-liked.tsv and YouTube-channel-uploads.tsv
 # v0.6.0, 2026-06-24 - changed Instapaper to local (instapaper-process-archived.js) not IFTTT. Here it just changes location.
@@ -16,7 +17,7 @@
 # v0.3.3, 20.3.2021 - ?
 # v0.3.0, ? - now copes with multi-line tweets
 #-------------------------------------------------------------------------------
-VERSION = "0.7.1"
+VERSION = "0.7.2"
 require 'date'
 require 'cgi'
 require 'colorize'
@@ -632,7 +633,6 @@ opt_parser = OptionParser.new do |opts|
   opts.banner = "NotePlan media adder v#{VERSION}" # \nDetails at https://github.com/jgclark/NotePlan-tools/\nUsage: npMediaSave.rb [options]"
   opts.separator ''
   options[:instapaper] = false
-  options[:medium] = false
   options[:spotify] = false
   options[:twitter] = false
   options[:verbose] = false

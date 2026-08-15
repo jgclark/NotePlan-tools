@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>HOME</key>
+		<string>/Users/jonathan</string>
+		<key>NPEXTRAS</key>
+		<string>/Users/jonathan/Dropbox/NPSummaries</string>
+		<key>PATH</key>
+		<string>/usr/local/bin:/usr/local/sbin:/usr/bin:/bin:/usr/sbin</string>
+	</dict>
+	<key>Label</key>
+	<string>jgc.npMediaSave</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/usr/bin/ruby</string>
+		<string>/Users/jonathan/bin/npMediaSave</string>
+		<string>-v</string>
+		<string>-i</string>
+		<string>-s</string>
+		<string>-t</string>
+		<string>-y</string>
+	</array>
+	<key>RunAtLoad</key>
+	<false/>
+	<key>StandardErrorPath</key>
+	<string>/tmp/org.jgc.npMediaSave.err.log</string>
+	<key>StandardOutPath</key>
+	<string>/tmp/org.jgc.npMediaSave.log</string>
+	<key>StartCalendarInterval</key>
+	<array>
+		<dict>
+			<key>Hour</key>
+			<integer>14</integer>
+			<key>Minute</key>
+			<integer>5</integer>
+		</dict>
+		<dict>
+			<key>Hour</key>
+			<integer>23</integer>
+			<key>Minute</key>
+			<integer>5</integer>
+		</dict>
+		<dict>
+			<key>Hour</key>
+			<integer>9</integer>
+			<key>Minute</key>
+			<integer>5</integer>
+		</dict>
+		<dict>
+			<key>Hour</key>
+			<integer>19</integer>
+			<key>Minute</key>
+			<integer>10</integer>
+		</dict>
+	</array>
+	<key>UserName</key>
+	<string>jonathan</string>
+</dict>
+</plist>
